@@ -88,43 +88,43 @@ def rotateX(object,degrees):
 
 # The function will draw an object by repeatedly callying drawPoly on each polygon in the object
 def drawObject(object):
-    for poly in object:
-        drawPoly(poly)
+    for poly in object: #for each polygon, 
+        drawPoly(poly)  #send it to drawPoly()
 
 # This function will draw a polygon by repeatedly callying drawLine on each pair of points
 # making up the object.  Remember to draw a line between the last point and the first.
 def drawPoly(poly):
-    for i in range(len(poly)):
-        if i==len(poly)-1:
-            drawLine(poly[i],poly[0])
-        else:
-            drawLine(poly[i],poly[i+1])
+    for i in range(len(poly)):          #for each point in the polygon (most likely only 3 but arbitrary for compatibility)
+        if i==len(poly)-1:              #if last point in polygon,
+            drawLine(poly[i],poly[0])   #draw line from last point to first
+        else:                           #if not last point,
+            drawLine(poly[i],poly[i+1]) #draw line from current point to the next point
 
 # Project the 3D endpoints to 2D point using a perspective projection implemented in 'project'
 # Convert the projected endpoints to display coordinates via a call to 'convertToDisplayCoordinates'
 # draw the actual line using the built-in create_line method
 def drawLine(start,end):
-    startdisplay = convertToDisplayCoordinates(project(start))
-    enddisplay = convertToDisplayCoordinates(project(end))
-    w.create_line(startdisplay[0],startdisplay[1],enddisplay[0],enddisplay[1])
+    startdisplay = convertToDisplayCoordinates(project(start))                 #send the starting point coords to the project method, then convert them to display coords then store to local var
+    enddisplay = convertToDisplayCoordinates(project(end))                     #same for ending point
+    w.create_line(startdisplay[0],startdisplay[1],enddisplay[0],enddisplay[1]) #use TKinter's create line method using our two points
 
 # This function converts from 3D to 2D (+ depth) using the perspective projection technique.  Note that it
 # will return a NEW list of points.  We will not want to keep around the projected points in our object as
 # they are only used in rendering
 def project(point):
-    ps = []
-    ps.append((d*point[0])/(-d+point[2]))
-    ps.append((d*point[1])/(-d+point[2]))
-    ps.append((point[2])/(-d+point[2]))
+    ps = []                                #create new list to return projected points without altering our shape definition
+    ps.append((d*point[0])/(-d+point[2]))  #x = d*x / -d+z
+    ps.append((d*point[1])/(-d+point[2]))  #y = d*y / -d+z
+    ps.append((point[2])/(-d+point[2]))    #z = z / -d*z
     return ps
 
 # This function converts a 2D point to display coordinates in the tk system.  Note that it will return a
 # NEW list of points.  We will not want to keep around the display coordinate points in our object as 
 # they are only used in rendering.
 def convertToDisplayCoordinates(point):
-    displayXY = []
-    displayXY.append(0.5*CanvasWidth+point[0])
-    displayXY.append(0.5*CanvasHeight+point[1])
+    displayXY = []                               #create new list to return converted points without altering our shape definition
+    displayXY.append(0.5*CanvasWidth+point[0])   #x = half the canvas width (center of canvas) plus the offset of x
+    displayXY.append(0.5*CanvasHeight+point[1])  #y = half the canvas height (center of canvas) plus the offset of y
     return displayXY
     
 
@@ -208,12 +208,17 @@ def zMinus():
 def changeTranslationStepSize(newsize):
     TranslationStepSize = newsize
 
+#**************************************************************************
+#The following define the functions for my controls
+#the first is commented and the rest of the functions behave identically changing different variables. Self-explanatory
+
+#lower the step size of the "scale" transformation control
 def changeScaleStepSizeDown():
-    global ScaleStepSize
-    ScaleStepSize = ScaleStepSize-0.1
-    if ScaleStepSize < 0.1:
+    global ScaleStepSize                #access global variable that controls the step size for the transformation controls
+    ScaleStepSize = ScaleStepSize-0.1   #alter it
+    if ScaleStepSize < 0.1:             #confine it
         ScaleStepSize = 0.1
-    scalecontrolsstepslabel.config(text = round(ScaleStepSize,1)*10)
+    scalecontrolsstepslabel.config(text = round(ScaleStepSize,1)*10) #change the text of the label for step size 
 
 def changeScaleStepSizeUp():
     global ScaleStepSize
@@ -250,6 +255,9 @@ def changeRotationStepSizeUp():
         RotationStepSize = 5
     rotationcontrolsstepslabel.config(text = RotationStepSize) 
 
+#**************************************************************************
+#TKinter layout
+
 root = Tk()
 outerframe = Frame(root)
 outerframe.pack()
@@ -267,8 +275,7 @@ resetcontrols.pack(side=TOP)
 resetButton = Button(resetcontrols, text="Reset", fg="green", command=reset)
 resetButton.pack(side=LEFT)
 
-#######
-#textvariable=labelText
+#scale step controls
 
 scalecontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 scalecontrolssteps.pack(side=LEFT)
@@ -287,7 +294,7 @@ scaleDownButton.pack(side=BOTTOM)
 scalecontrols = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 scalecontrols.pack(side=LEFT)
 
-scalecontrolslabel = Label(scalecontrols, text="Scale")
+scalecontrolslabel = Label(scalecontrols, text="Scale", fg="red")
 scalecontrolslabel.pack()
 
 largerButton = Button(scalecontrols, text="Larger", command=larger)
@@ -296,7 +303,7 @@ largerButton.pack(side=TOP)
 smallerButton = Button(scalecontrols, text="Smaller", command=smaller)
 smallerButton.pack(side=BOTTOM)
 
-########
+#translation step controls
 
 translationcontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 translationcontrolssteps.pack(side=LEFT)
@@ -317,7 +324,7 @@ translationDownButton.pack(side=BOTTOM)
 translatecontrols = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 translatecontrols.pack(side=LEFT)
 
-translatecontrolslabel = Label(translatecontrols, text="Translation")
+translatecontrolslabel = Label(translatecontrols, text="Translation", fg="red")
 translatecontrolslabel.pack()
 
 translatecontrolsupper = Frame(translatecontrols)
@@ -346,7 +353,7 @@ upButton.pack(side=LEFT)
 rightButton = Button(translatecontrolslower, text="→", command=right)
 rightButton.pack(side=LEFT)
 
-##########
+#rotation step controls
 
 rotationcontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 rotationcontrolssteps.pack(side=LEFT)
@@ -365,7 +372,7 @@ rotationDownButton.pack(side=BOTTOM)
 rotationcontrols = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 rotationcontrols.pack(side=LEFT)
 
-rotationcontrolslabel = Label(rotationcontrols, text="Rotation")
+rotationcontrolslabel = Label(rotationcontrols, text="Rotation", fg="red")
 rotationcontrolslabel.pack()
 
 rotationcontrolsx = Frame(rotationcontrols)
