@@ -6,6 +6,7 @@ CanvasWidth = 400
 CanvasHeight = 400
 d = 500
 
+#these are added so that we can transform by varying amounts
 RotationStepSize = 5
 TranslationStepSize = 5
 ScaleStepSize = 0.1
@@ -47,7 +48,6 @@ def resetPyramid():
 # This function translates an object by some displacement.  The displacement is a 3D
 # vector so the amount of displacement in each dimension can vary.
 def translate(object, displacement):
-    print("translate stub executed.")
     for i in range(len(object)):                        #for every point (5 loops)
         for j in range(len(object[i])):                 #for each dimension value (3 loops)
             object[i][j] = object[i][j]+displacement[j] #add our displacement value to the current location
@@ -55,7 +55,6 @@ def translate(object, displacement):
 # This function performs a simple uniform scale of an object assuming the object is
 # centered at the origin.  The scalefactor is a scalar.
 def scale(object,scalefactor):
-    print("scale stub executed.")
     for i in range(len(object)):                        #for every point (5 loops)
         for j in range(len(object[i])):                 #for each dimension value (3 loops)
             object[i][j] = object[i][j]*scalefactor     #multiply currrent values by the scale factor
@@ -64,10 +63,10 @@ def scale(object,scalefactor):
 # by 'degrees', assuming the object is centered at the origin.  The rotation is CCW
 # in a LHS when viewed from -Z [the location of the viewer in the standard postion]
 def rotateZ(object,degrees):
-    radians = math.radians(degrees) #convert degrees to radians
+    radians = math.radians(-degrees) #convert degrees to radians
     for i in range(len(object)):
-        object[i][0] = object[i][0]*math.cos(radians)-object[i][1]*math.sin(radians)
-        object[i][1] = object[i][0]*math.sin(radians)+object[i][1]*math.cos(radians)
+        object[i][0] = object[i][0]*math.cos(radians)-object[i][1]*math.sin(radians)   #x = x*cosθ-y*sinθ
+        object[i][1] = object[i][0]*math.sin(radians)+object[i][1]*math.cos(radians)   #y = x*sinθ+y*cosθ
     
 # This function performs a rotation of an object about the Y axis (from +Z to +X)
 # by 'degrees', assuming the object is centered at the origin.  The rotation is CW
@@ -75,17 +74,17 @@ def rotateZ(object,degrees):
 def rotateY(object,degrees):
     radians = math.radians(degrees) #convert degrees to radians
     for i in range(len(object)):
-        object[i][0] = object[i][0]*math.cos(radians)+object[i][2]*math.sin(radians)
-        object[i][2] = -object[i][0]*math.sin(radians)+object[i][2]*math.cos(radians)
+        object[i][0] = object[i][0]*math.cos(radians)+object[i][2]*math.sin(radians)   #x = x*cosθ+z*sinθ
+        object[i][2] = -object[i][0]*math.sin(radians)+object[i][2]*math.cos(radians)  #z = -x*sinθ+z*cosθ
 
 # This function performs a rotation of an object about the X axis (from +Y to +Z)
 # by 'degrees', assuming the object is centered at the origin.  The rotation is CW
 # in a LHS when viewed from +X looking toward the origin.
 def rotateX(object,degrees):
-    radians = math.radians(degrees) #convert degrees to radians
+    radians = math.radians(-degrees) #convert degrees to radians
     for i in range(len(object)):
-        object[i][1] = object[i][1]*math.cos(radians)-object[i][2]*math.sin(radians)
-        object[i][2] = object[i][1]*math.sin(radians)+object[i][2]*math.cos(radians)
+        object[i][1] = object[i][1]*math.cos(radians)-object[i][2]*math.sin(radians)   #y = y*cosθ-z*sinθ
+        object[i][2] = object[i][1]*math.sin(radians)+object[i][2]*math.cos(radians)   #z = y*sinθ+z*sinθ
 
 # The function will draw an object by repeatedly callying drawPoly on each polygon in the object
 def drawObject(object):
@@ -100,9 +99,6 @@ def drawPoly(poly):
             drawLine(poly[i],poly[0])
         else:
             drawLine(poly[i],poly[i+1])
-
-def testo():
-    w.create_line(0,0,100,100)
 
 # Project the 3D endpoints to 2D point using a perspective projection implemented in 'project'
 # Convert the projected endpoints to display coordinates via a call to 'convertToDisplayCoordinates'
@@ -119,6 +115,7 @@ def project(point):
     ps = []
     ps.append((d*point[0])/(-d+point[2]))
     ps.append((d*point[1])/(-d+point[2]))
+    ps.append((point[2])/(-d+point[2]))
     return ps
 
 # This function converts a 2D point to display coordinates in the tk system.  Note that it will return a
@@ -208,6 +205,51 @@ def zMinus():
     rotateZ(PyramidPointCloud,-RotationStepSize)
     drawObject(Pyramid)
 
+def changeTranslationStepSize(newsize):
+    TranslationStepSize = newsize
+
+def changeScaleStepSizeDown():
+    global ScaleStepSize
+    ScaleStepSize = ScaleStepSize-0.1
+    if ScaleStepSize < 0.1:
+        ScaleStepSize = 0.1
+    scalecontrolsstepslabel.config(text = round(ScaleStepSize,1)*10)
+
+def changeScaleStepSizeUp():
+    global ScaleStepSize
+    ScaleStepSize = ScaleStepSize+0.1
+    if ScaleStepSize > 0.9:
+        ScaleStepSize = 0.9
+    scalecontrolsstepslabel.config(text = round(ScaleStepSize,1)*10)
+
+def changeTranslationStepSizeDown():
+    global TranslationStepSize
+    TranslationStepSize = TranslationStepSize-5
+    if TranslationStepSize < 1:
+        TranslationStepSize = 1
+    translationcontrolsstepslabel.config(text = TranslationStepSize)
+
+def changeTranslationStepSizeUp():
+    global TranslationStepSize
+    TranslationStepSize = TranslationStepSize+5
+    if TranslationStepSize > 100:
+        TranslationStepSize = 100
+    translationcontrolsstepslabel.config(text = TranslationStepSize)
+
+def changeRotationStepSizeDown():
+    global RotationStepSize
+    RotationStepSize = RotationStepSize-1
+    if RotationStepSize < 1:
+        RotationStepSize = 1
+    rotationcontrolsstepslabel.config(text = RotationStepSize)
+
+def changeRotationStepSizeUp():
+    global RotationStepSize
+    RotationStepSize = RotationStepSize+1
+    if RotationStepSize > 5:
+        RotationStepSize = 5
+    rotationcontrolsstepslabel.config(text = RotationStepSize) 
+
 root = Tk()
 outerframe = Frame(root)
 outerframe.pack()
@@ -225,6 +267,23 @@ resetcontrols.pack(side=TOP)
 resetButton = Button(resetcontrols, text="Reset", fg="green", command=reset)
 resetButton.pack(side=LEFT)
 
+#######
+#textvariable=labelText
+
+scalecontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
+scalecontrolssteps.pack(side=LEFT)
+
+scaleUpButton = Button(scalecontrolssteps, text="▲", command=changeScaleStepSizeUp)
+scaleUpButton.pack(side=TOP)
+
+scalecontrolsstepslabel = Label(scalecontrolssteps, text="1.0")
+scalecontrolsstepslabel.pack()
+
+scaleDownButton = Button(scalecontrolssteps, text="▼", command=changeScaleStepSizeDown)
+scaleDownButton.pack(side=BOTTOM)
+
+########
+
 scalecontrols = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 scalecontrols.pack(side=LEFT)
 
@@ -237,6 +296,24 @@ largerButton.pack(side=TOP)
 smallerButton = Button(scalecontrols, text="Smaller", command=smaller)
 smallerButton.pack(side=BOTTOM)
 
+########
+
+translationcontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
+translationcontrolssteps.pack(side=LEFT)
+
+translationUpButton = Button(translationcontrolssteps, text="▲", command=changeTranslationStepSizeUp)
+translationUpButton.pack(side=TOP)
+
+translationcontrolsstepslabel = Label(translationcontrolssteps, text="5")
+translationcontrolsstepslabel.pack()
+
+translationDownButton = Button(translationcontrolssteps, text="▼", command=changeTranslationStepSizeDown)
+translationDownButton.pack(side=BOTTOM)
+
+
+
+########
+
 translatecontrols = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 translatecontrols.pack(side=LEFT)
 
@@ -248,6 +325,8 @@ translatecontrolsupper.pack()
 
 translatecontrolslower = Frame(translatecontrols)
 translatecontrolslower.pack()
+
+#########
 
 backwardButton = Button(translatecontrolsupper, text="⟱", command=backward)
 backwardButton.pack(side=LEFT)
@@ -266,6 +345,22 @@ upButton.pack(side=LEFT)
 
 rightButton = Button(translatecontrolslower, text="→", command=right)
 rightButton.pack(side=LEFT)
+
+##########
+
+rotationcontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
+rotationcontrolssteps.pack(side=LEFT)
+
+rotationUpButton = Button(rotationcontrolssteps, text="▲", command=changeRotationStepSizeUp)
+rotationUpButton.pack(side=TOP)
+
+rotationcontrolsstepslabel = Label(rotationcontrolssteps, text="5")
+rotationcontrolsstepslabel.pack()
+
+rotationDownButton = Button(rotationcontrolssteps, text="▼", command=changeRotationStepSizeDown)
+rotationDownButton.pack(side=BOTTOM)
+
+##########
 
 rotationcontrols = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 rotationcontrols.pack(side=LEFT)
