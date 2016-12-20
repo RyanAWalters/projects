@@ -1,3 +1,17 @@
+###########################################################################
+#
+#   Ryan Walters
+#   101-60-902
+#   12/13/16
+#
+#   Assignment 1:
+#   This program draws a three dimensional pyramid and manipulates it,
+#   projecting results into a 2d plane so that it is viewable on a screen.
+#   Currently can scale, rotate, and translate the pyramid. All of which
+#   can be done at different magnitudes.
+#
+###########################################################################
+
 import math
 from copy import deepcopy
 from tkinter import *
@@ -246,14 +260,14 @@ def changeRotationStepSizeDown():
     RotationStepSize = RotationStepSize-1
     if RotationStepSize < 1:
         RotationStepSize = 1
-    rotationcontrolsstepslabel.config(text = RotationStepSize)
+    rotationcontrolsstepslabel.config(text = str(RotationStepSize) + '°')
 
 def changeRotationStepSizeUp():
     global RotationStepSize
     RotationStepSize = RotationStepSize+1
     if RotationStepSize > 5:
         RotationStepSize = 5
-    rotationcontrolsstepslabel.config(text = RotationStepSize) 
+    rotationcontrolsstepslabel.config(text = str(RotationStepSize) + '°') 
 
 #**************************************************************************
 #TKinter layout
@@ -361,7 +375,7 @@ rotationcontrolssteps.pack(side=LEFT)
 rotationUpButton = Button(rotationcontrolssteps, text="▲", command=changeRotationStepSizeUp)
 rotationUpButton.pack(side=TOP)
 
-rotationcontrolsstepslabel = Label(rotationcontrolssteps, text="5")
+rotationcontrolsstepslabel = Label(rotationcontrolssteps, text="5°")
 rotationcontrolsstepslabel.pack()
 
 rotationDownButton = Button(rotationcontrolssteps, text="▼", command=changeRotationStepSizeDown)
