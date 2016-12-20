@@ -23,7 +23,7 @@ d = 500
 #these are added so that we can transform by varying amounts
 RotationStepSize = 5
 TranslationStepSize = 5
-ScaleStepSize = 0.1
+ScaleStepSize = 1.00
 
 
 # ***************************** Initialize Pyramid Object ***************************
@@ -79,8 +79,10 @@ def scale(object,scalefactor):
 def rotateZ(object,degrees):
     radians = math.radians(-degrees) #convert degrees to radians
     for i in range(len(object)):
-        object[i][0] = object[i][0]*math.cos(radians)-object[i][1]*math.sin(radians)   #x = x*cosθ-y*sinθ
-        object[i][1] = object[i][0]*math.sin(radians)+object[i][1]*math.cos(radians)   #y = x*sinθ+y*cosθ
+        x = object[i][0]
+        y = object[i][1]
+        object[i][0] = x*math.cos(radians)-y*math.sin(radians)   #x = x*cosθ-y*sinθ
+        object[i][1] = x*math.sin(radians)+y*math.cos(radians)   #y = x*sinθ+y*cosθ
     
 # This function performs a rotation of an object about the Y axis (from +Z to +X)
 # by 'degrees', assuming the object is centered at the origin.  The rotation is CW
@@ -88,8 +90,10 @@ def rotateZ(object,degrees):
 def rotateY(object,degrees):
     radians = math.radians(degrees) #convert degrees to radians
     for i in range(len(object)):
-        object[i][0] = object[i][0]*math.cos(radians)+object[i][2]*math.sin(radians)   #x = x*cosθ+z*sinθ
-        object[i][2] = -object[i][0]*math.sin(radians)+object[i][2]*math.cos(radians)  #z = -x*sinθ+z*cosθ
+        x = object[i][0]
+        z = object[i][2]
+        object[i][0] = x*math.cos(radians)+z*math.sin(radians)   #x = x*cosθ+z*sinθ
+        object[i][2] = -x*math.sin(radians)+z*math.cos(radians)  #z = -x*sinθ+z*cosθ
 
 # This function performs a rotation of an object about the X axis (from +Y to +Z)
 # by 'degrees', assuming the object is centered at the origin.  The rotation is CW
@@ -97,8 +101,10 @@ def rotateY(object,degrees):
 def rotateX(object,degrees):
     radians = math.radians(-degrees) #convert degrees to radians
     for i in range(len(object)):
-        object[i][1] = object[i][1]*math.cos(radians)-object[i][2]*math.sin(radians)   #y = y*cosθ-z*sinθ
-        object[i][2] = object[i][1]*math.sin(radians)+object[i][2]*math.cos(radians)   #z = y*sinθ+z*sinθ
+        y = object[i][1]
+        z = object[i][2]
+        object[i][1] = y*math.cos(radians)-z*math.sin(radians)   #y = y*cosθ-z*sinθ
+        object[i][2] = y*math.sin(radians)+z*math.cos(radians)   #z = y*sinθ+z*sinθ
 
 # The function will draw an object by repeatedly callying drawPoly on each polygon in the object
 def drawObject(object):
@@ -157,6 +163,11 @@ def larger():
 def smaller():
     w.delete(ALL)
     scale(PyramidPointCloud,1-ScaleStepSize)
+    drawObject(Pyramid)
+
+def scaler():
+    w.delete(ALL)
+    scale(PyramidPointCloud,ScaleStepSize)
     drawObject(Pyramid)
 
 def forward():
@@ -229,31 +240,50 @@ def changeTranslationStepSize(newsize):
 #lower the step size of the "scale" transformation control
 def changeScaleStepSizeDown():
     global ScaleStepSize                #access global variable that controls the step size for the transformation controls
-    ScaleStepSize = ScaleStepSize-0.1   #alter it
-    if ScaleStepSize < 0.1:             #confine it
-        ScaleStepSize = 0.1
-    scalecontrolsstepslabel.config(text = round(ScaleStepSize,1)*10) #change the text of the label for step size 
+    ScaleStepSize = ScaleStepSize-0.01   #alter it
+    if ScaleStepSize < 0.01:             #confine it
+        ScaleStepSize = 0.01
+    scalecontrolsstepslabel.config(text = str('{:.2f}'.format(round(ScaleStepSize,2))) + 'x') #change the text of the label for step size
+    if ScaleStepSize < 1:
+        scalecontrolslabel2.config(text = '(Smaller)')
+    if ScaleStepSize == 1:
+        scalecontrolslabel2.config(text = '(Static)')
 
 def changeScaleStepSizeUp():
     global ScaleStepSize
-    ScaleStepSize = ScaleStepSize+0.1
-    if ScaleStepSize > 0.9:
-        ScaleStepSize = 0.9
-    scalecontrolsstepslabel.config(text = round(ScaleStepSize,1)*10)
+    ScaleStepSize = ScaleStepSize+0.01
+    if ScaleStepSize > 10:
+        ScaleStepSize = 10
+    scalecontrolsstepslabel.config(text = str('{:.2f}'.format(round(ScaleStepSize,2))) + 'x')
+    if ScaleStepSize > 1:
+        scalecontrolslabel2.config(text = '(Larger)')
+    if ScaleStepSize == 1:
+        scalecontrolslabel2.config(text = '(Static)')
+
+def resetScaleStepSize(event):
+    global ScaleStepSize
+    ScaleStepSize = 1.00
+    scalecontrolsstepslabel.config(text = str('{:.2f}'.format(round(ScaleStepSize,2))) + 'x')
+    scalecontrolslabel2.config(text = '(Static)')
 
 def changeTranslationStepSizeDown():
     global TranslationStepSize
-    TranslationStepSize = TranslationStepSize-5
+    TranslationStepSize = TranslationStepSize-1
     if TranslationStepSize < 1:
         TranslationStepSize = 1
     translationcontrolsstepslabel.config(text = TranslationStepSize)
 
 def changeTranslationStepSizeUp():
     global TranslationStepSize
-    TranslationStepSize = TranslationStepSize+5
+    TranslationStepSize = TranslationStepSize+1
     if TranslationStepSize > 100:
         TranslationStepSize = 100
     translationcontrolsstepslabel.config(text = TranslationStepSize)
+
+def resetTranslationStepSize(event):
+    global TranslationStepSize
+    TranslationStepSize = 5
+    translationcontrolsstepslabel.config(text = str(TranslationStepSize))
 
 def changeRotationStepSizeDown():
     global RotationStepSize
@@ -265,9 +295,14 @@ def changeRotationStepSizeDown():
 def changeRotationStepSizeUp():
     global RotationStepSize
     RotationStepSize = RotationStepSize+1
-    if RotationStepSize > 5:
-        RotationStepSize = 5
-    rotationcontrolsstepslabel.config(text = str(RotationStepSize) + '°') 
+    if RotationStepSize > 180:
+        RotationStepSize = 180
+    rotationcontrolsstepslabel.config(text = str(RotationStepSize) + '°')
+
+def resetRotationStepSize(event):
+    global RotationStepSize
+    RotationStepSize = 5
+    rotationcontrolsstepslabel.config(text = str(RotationStepSize) + '°')
 
 #**************************************************************************
 #TKinter layout
@@ -294,13 +329,14 @@ resetButton.pack(side=LEFT)
 scalecontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 scalecontrolssteps.pack(side=LEFT)
 
-scaleUpButton = Button(scalecontrolssteps, text="▲", command=changeScaleStepSizeUp)
+scaleUpButton = Button(scalecontrolssteps, text="▲", command=changeScaleStepSizeUp, repeatdelay=500, repeatinterval=25)
 scaleUpButton.pack(side=TOP)
 
-scalecontrolsstepslabel = Label(scalecontrolssteps, text="1.0")
+scalecontrolsstepslabel = Label(scalecontrolssteps, text="1.00x")
+scalecontrolsstepslabel.bind('<Button-1>', resetScaleStepSize)
 scalecontrolsstepslabel.pack()
 
-scaleDownButton = Button(scalecontrolssteps, text="▼", command=changeScaleStepSizeDown)
+scaleDownButton = Button(scalecontrolssteps, text="▼", command=changeScaleStepSizeDown, repeatdelay=500, repeatinterval=25)
 scaleDownButton.pack(side=BOTTOM)
 
 ########
@@ -309,26 +345,33 @@ scalecontrols = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 scalecontrols.pack(side=LEFT)
 
 scalecontrolslabel = Label(scalecontrols, text="Scale", fg="red")
-scalecontrolslabel.pack()
+scalecontrolslabel.pack(side=TOP)
 
-largerButton = Button(scalecontrols, text="Larger", command=larger)
-largerButton.pack(side=TOP)
+scalecontrolslabel2 = Label(scalecontrols, text="(Static)", fg="red")
+scalecontrolslabel2.pack()
 
-smallerButton = Button(scalecontrols, text="Smaller", command=smaller)
-smallerButton.pack(side=BOTTOM)
+#largerButton = Button(scalecontrols, text="Larger", command=larger)
+#largerButton.pack(side=TOP)
+
+#smallerButton = Button(scalecontrols, text="Smaller", command=smaller)
+#smallerButton.pack(side=BOTTOM)
+
+scaleButton = Button(scalecontrols, text="Scale", command=scaler)
+scaleButton.pack(side=BOTTOM)
 
 #translation step controls
 
 translationcontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 translationcontrolssteps.pack(side=LEFT)
 
-translationUpButton = Button(translationcontrolssteps, text="▲", command=changeTranslationStepSizeUp)
+translationUpButton = Button(translationcontrolssteps, text="▲", command=changeTranslationStepSizeUp, repeatdelay=500, repeatinterval=50)
 translationUpButton.pack(side=TOP)
 
 translationcontrolsstepslabel = Label(translationcontrolssteps, text="5")
+translationcontrolsstepslabel.bind('<Button-1>', resetTranslationStepSize)
 translationcontrolsstepslabel.pack()
 
-translationDownButton = Button(translationcontrolssteps, text="▼", command=changeTranslationStepSizeDown)
+translationDownButton = Button(translationcontrolssteps, text="▼", command=changeTranslationStepSizeDown, repeatdelay=500, repeatinterval=50)
 translationDownButton.pack(side=BOTTOM)
 
 
@@ -349,22 +392,22 @@ translatecontrolslower.pack()
 
 #########
 
-backwardButton = Button(translatecontrolsupper, text="⟱", command=backward)
+backwardButton = Button(translatecontrolsupper, text="⟱", command=backward, repeatdelay=500, repeatinterval=50)
 backwardButton.pack(side=LEFT)
 
-upButton = Button(translatecontrolsupper, text="↑", command=up)
+upButton = Button(translatecontrolsupper, text="↑", command=up, repeatdelay=500, repeatinterval=50)
 upButton.pack(side=LEFT)
 
-forwardButton = Button(translatecontrolsupper, text="⟰", command=forward)
+forwardButton = Button(translatecontrolsupper, text="⟰", command=forward, repeatdelay=500, repeatinterval=50)
 forwardButton.pack(side=LEFT)
 
-leftButton = Button(translatecontrolslower, text="←", command=left)
+leftButton = Button(translatecontrolslower, text="←", command=left, repeatdelay=500, repeatinterval=50)
 leftButton.pack(side=LEFT)
 
-upButton = Button(translatecontrolslower, text="↓", command=down)
+upButton = Button(translatecontrolslower, text="↓", command=down, repeatdelay=500, repeatinterval=50)
 upButton.pack(side=LEFT)
 
-rightButton = Button(translatecontrolslower, text="→", command=right)
+rightButton = Button(translatecontrolslower, text="→", command=right, repeatdelay=500, repeatinterval=50)
 rightButton.pack(side=LEFT)
 
 #rotation step controls
@@ -372,13 +415,14 @@ rightButton.pack(side=LEFT)
 rotationcontrolssteps = Frame(controlpanel, borderwidth=4, relief=RIDGE)
 rotationcontrolssteps.pack(side=LEFT)
 
-rotationUpButton = Button(rotationcontrolssteps, text="▲", command=changeRotationStepSizeUp)
+rotationUpButton = Button(rotationcontrolssteps, text="▲", command=changeRotationStepSizeUp, repeatdelay=500, repeatinterval=50)
 rotationUpButton.pack(side=TOP)
 
 rotationcontrolsstepslabel = Label(rotationcontrolssteps, text="5°")
+rotationcontrolsstepslabel.bind('<Button-1>', resetRotationStepSize)
 rotationcontrolsstepslabel.pack()
 
-rotationDownButton = Button(rotationcontrolssteps, text="▼", command=changeRotationStepSizeDown)
+rotationDownButton = Button(rotationcontrolssteps, text="▼", command=changeRotationStepSizeDown, repeatdelay=500, repeatinterval=50)
 rotationDownButton.pack(side=BOTTOM)
 
 ##########
@@ -398,22 +442,22 @@ rotationcontrolsy.pack(side=LEFT)
 rotationcontrolsz = Frame(rotationcontrols)
 rotationcontrolsz.pack(side=LEFT)
 
-xPlusButton = Button(rotationcontrolsx, text="X+", command=xPlus)
+xPlusButton = Button(rotationcontrolsx, text="X+", command=xPlus, repeatdelay=500, repeatinterval=50)
 xPlusButton.pack(side=TOP)
 
-xMinusButton = Button(rotationcontrolsx, text="X-", command=xMinus)
+xMinusButton = Button(rotationcontrolsx, text="X-", command=xMinus, repeatdelay=500, repeatinterval=50)
 xMinusButton.pack(side=BOTTOM)
 
-yPlusButton = Button(rotationcontrolsy, text="Y+", command=yPlus)
+yPlusButton = Button(rotationcontrolsy, text="Y+", command=yPlus, repeatdelay=500, repeatinterval=50)
 yPlusButton.pack(side=TOP)
 
-yMinusButton = Button(rotationcontrolsy, text="Y-", command=yMinus)
+yMinusButton = Button(rotationcontrolsy, text="Y-", command=yMinus, repeatdelay=500, repeatinterval=50)
 yMinusButton.pack(side=BOTTOM)
 
-zPlusButton = Button(rotationcontrolsz, text="Z+", command=zPlus)
+zPlusButton = Button(rotationcontrolsz, text="Z+", command=zPlus, repeatdelay=500, repeatinterval=50)
 zPlusButton.pack(side=TOP)
 
-zMinusButton = Button(rotationcontrolsz, text="Z-", command=zMinus)
+zMinusButton = Button(rotationcontrolsz, text="Z-", command=zMinus, repeatdelay=500, repeatinterval=50)
 zMinusButton.pack(side=BOTTOM)
 
 root.mainloop()
