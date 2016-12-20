@@ -356,7 +356,7 @@ scalecontrolslabel2.pack()
 #smallerButton = Button(scalecontrols, text="Smaller", command=smaller)
 #smallerButton.pack(side=BOTTOM)
 
-scaleButton = Button(scalecontrols, text="Scale", command=scaler)
+scaleButton = Button(scalecontrols, text="Scale", command=scaler, repeatdelay=500, repeatinterval=100)
 scaleButton.pack(side=BOTTOM)
 
 #translation step controls
