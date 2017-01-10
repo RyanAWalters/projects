@@ -677,6 +677,9 @@ def updateMeshList():
     for i in range(len(allMeshes)):  # for each mesh
         meshList.insert(i, meshNames[i])  # add it to the mesh list
 
+    if len(selectedMeshes) > 0:
+        meshList.selection_set(END)
+
 
 # function called when user changes selection of meshes in the mesh list box
 def onSelectionChanged(input):
