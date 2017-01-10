@@ -596,6 +596,7 @@ def makePyramid():
     updateMeshList()  # update our UI's mesh list
     pyramidMesh.findMidpoint()  # find the midpoint of our new object
     drawScreen()  # draw the screen
+    updateTitleBar()
     return pyramidMesh
 
 
@@ -646,6 +647,7 @@ def makeCube():
     updateMeshList()  # update our UI's mesh list
     cubeMesh.findMidpoint()  # find the midpoint of our new object
     drawScreen()  # draw the screen
+    updateTitleBar()
     return cubeMesh
 
 
@@ -661,6 +663,7 @@ def deleteMesh():
 
     selectedMeshes = []  # empty the list of selected meshes
     updateMeshList()  # update our UI's mesh list
+    updateTitleBar()
     drawScreen()  # draw the screen
 
 
@@ -685,6 +688,7 @@ def onSelectionChanged(input):
     for i in list(meshList.curselection()):  # for each mesh selected in the UI
         selectedMeshes.append(allMeshes[i])  # add it to our selected meshes list
 
+    updateTitleBar()
     drawScreen()  # draw the screen
 
 
@@ -813,6 +817,8 @@ def toggleNIP():
         NIP = False
 
 
+# Handles screen and viewport resizing and recalculating. Whenever the window size is change by the user, set the new
+# width and height of our canvas to the new midpoint, so that the origin stays at the center of the canvas.
 def updateCanvasCoords(event):
     global CanvasHeight
     global CanvasWidth
@@ -823,11 +829,23 @@ def updateCanvasCoords(event):
     drawScreen()
 
 
+# update what is written on the title bar with the number of meshes and selected meshes
+def updateTitleBar():
+    if len(allMeshes) == 1:
+        meshesString = 'Mesh'
+    else:
+        meshesString = 'Meshes'
+    root.wm_title("Sweet Engine v0.2 -- " + str(len(allMeshes)) + " "
+                  + meshesString + " (" + str(len(selectedMeshes)) + " Selected)")
+
 
 # *****************************************************
 # ***************** TKinter layout ********************
 
 root = Tk()
+root.minsize(444, 519)
+root.wm_title("Sweet Engine v0.2")
+
 outerframe = Frame(root)
 outerframe.pack(fill="both", expand=True)
 
