@@ -392,13 +392,12 @@ class Mesh:
         a = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]]
         b = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]
 
-        norm = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+        norm = [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]]
 
-        center = [(p[0][0] + p[1][0] + p[2][0]) / 3, (p[0][1] + p[1][1] + p[2][1]) / 3,
-                  (p[0][2] + p[1][2] + p[2][2]) / 3]
-        view = [center[0] - 0, center[1] - 0, center[2] - d]
+        center = [(p[0][0]+p[1][0]+p[2][0])/3, (p[0][1]+p[1][1]+p[2][1])/3, (p[0][2]+p[1][2]+p[2][2])/3]
+        view = [center[0]-0, center[1]-0, center[2]-d]
 
-        if (view[0] * norm[0] + view[1] * norm[1] + view[2] * norm[2]) < 0:
+        if (view[0]*norm[0] + view[1]*norm[1] + view[2]*norm[2]) < 0:
             return False
         else:
             return True
@@ -614,7 +613,6 @@ def makePyramid():
     updateMeshList()  # update our UI's mesh list
     pyramidMesh.findMidpoint()  # find the midpoint of our new object
     drawScreen()  # draw the screen
-    updateTitleBar()
     return pyramidMesh
 
 
@@ -672,7 +670,6 @@ def makeCube():
     updateMeshList()  # update our UI's mesh list
     cubeMesh.findMidpoint()  # find the midpoint of our new object
     drawScreen()  # draw the screen
-    updateTitleBar()
     return cubeMesh
 
 
@@ -688,7 +685,6 @@ def deleteMesh():
 
     selectedMeshes = []  # empty the list of selected meshes
     updateMeshList()  # update our UI's mesh list
-    updateTitleBar()
     drawScreen()  # draw the screen
 
 
@@ -702,9 +698,6 @@ def updateMeshList():
     for i in range(len(allMeshes)):  # for each mesh
         meshList.insert(i, meshNames[i])  # add it to the mesh list
 
-    if len(selectedMeshes) > 0:
-        meshList.selection_set(END)
-
 
 # function called when user changes selection of meshes in the mesh list box
 def onSelectionChanged(input):
@@ -716,7 +709,6 @@ def onSelectionChanged(input):
     for i in list(meshList.curselection()):  # for each mesh selected in the UI
         selectedMeshes.append(allMeshes[i])  # add it to our selected meshes list
 
-    updateTitleBar()
     drawScreen()  # draw the screen
 
 
@@ -845,8 +837,6 @@ def toggleNIP():
         NIP = False
 
 
-# Handles screen and viewport resizing and recalculating. Whenever the window size is change by the user, set the new
-# width and height of our canvas to the new midpoint, so that the origin stays at the center of the canvas.
 def updateCanvasCoords(event):
     global CanvasHeight
     global CanvasWidth
@@ -857,24 +847,11 @@ def updateCanvasCoords(event):
     drawScreen()
 
 
-# update what is written on the title bar with the number of meshes and selected meshes
-def updateTitleBar():
-    if len(allMeshes) == 1:
-        meshesString = 'Mesh'
-    else:
-        meshesString = 'Meshes'
-    root.wm_title("Sweet Engine v0.2 -- " + str(len(allMeshes)) + " "
-                  + meshesString + " (" + str(len(selectedMeshes)) + " Selected)")
-
 
 # *****************************************************
 # ***************** TKinter layout ********************
 
 root = Tk()
-root.minsize(444, 519)
-root.geometry("444x519")
-root.wm_title("Sweet Engine v0.2")
-
 outerframe = Frame(root)
 outerframe.pack(fill="both", expand=True)
 
