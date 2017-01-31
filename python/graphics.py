@@ -2,9 +2,9 @@
 #
 #   Ryan Walters
 #   101-60-902
-#   1/9/16
+#   1/28/16
 #
-#   Assignment 2:
+#   Assignment 3:
 #   This program draws three dimensional objects and manipulates them,
 #   projecting results into a 2d plane so that it is viewable on a screen.
 #
@@ -15,6 +15,9 @@
 #   It can perform manipulations both in place and from origin by toggling the use of world-space coordinates.
 #   User can create, delete, manipulate and select any number of objects.
 #   There are currently pyramids and cubes implemented.
+#
+#   You can toggle culling of backfaces, as well as the filling in of polygons. Polygons are filled in pixel by pixel
+#   and can occlude background objects by using a z buffer
 #
 ########################################################################################################################
 
@@ -56,6 +59,7 @@ from tkinter import *
 CanvasWidth = 400
 CanvasHeight = 400
 d = 500
+zbuffer = [[0 for x in range(CanvasHeight)] for y in range(CanvasWidth)]
 
 # these are added so that we can transform by varying amounts
 RotationStepSize = 5
@@ -71,6 +75,12 @@ numMeshesCreated = 0
 # stands for Not In-Place. If true, we use world-coordinate system for transformations rather than local
 NIP = False
 
+isWireframe = False  # toggle for backface culling
+willNotDraw = 1313131313
+isFilled = False  # toggle for filling the poly
+isZbuffered = True  # toggle for Z-buffering
+drawEdges = True  # toggle for drawing edges at all
+
 
 # **************************************************************************
 # Our mesh object class. All meshes that we create are defined by this class. This class contains the variables and
@@ -84,6 +94,8 @@ class Mesh:
     xRotMatrix = [[1, 0, 0, 0], [0, 2, 2, 0], [0, 2, 2, 0], [0, 0, 0, 1]]
     yRotMatrix = [[2, 0, 2, 0], [0, 1, 0, 0], [2, 0, 2, 0], [0, 0, 0, 1]]
     zRotMatrix = [[2, 2, 0, 0], [2, 2, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+
+    meshColor = '#9999%02x'
 
     # Need an initializer for variables. If variables are defined above this line (like our matrices), altering them in
     # one instantiated object alters them for every instantiated object. Not what we want
@@ -376,32 +388,271 @@ class Mesh:
         for poly in self.meshDef:  # for each polygon,
             self.drawPoly(poly, selected)  # send it to drawPoly()
 
+        # TODO: DEBUG---
+        for i in range(len(self.pointCloud)):
+            print("vertex coords for " + str(i) + " is " + str(self.pointCloud[i][0]) + "," + str(self.pointCloud[i][1]) + "," + str(self.pointCloud[i][2]))
+
     # This function will draw a polygon by repeatedly calling drawLine on each pair of points
     # making up the object.  Remember to draw a line between the last point and the first.
     def drawPoly(self, poly, selected):
-        if self.checkIfBackface(poly):
-            return
-        for i in range(len(poly)):  # for each point in the polygon (most likely only 3 but arbitrary for compatibility)
-            if i == len(poly) - 1:  # if last point in polygon,
-                self.drawLine(poly[i], poly[0], selected)  # draw line from last point to first
-            else:  # if not last point,
-                self.drawLine(poly[i], poly[i + 1], selected)  # draw line from current point to the next point
+        if not isWireframe:
+            if self.checkIfBackface(poly):
+                return
+        if isFilled:
+            self.fillPolygon(poly)
+        if drawEdges:
+            for i in range(len(poly)):  # for each point in the polygon (most likely only 3 but arbitrary for compatibility)
+                if i == len(poly) - 1:  # if last point in polygon,
+                    self.drawLine(poly[i], poly[0], selected)  # draw line from last point to first
+                else:  # if not last point,
+                    self.drawLine(poly[i], poly[i + 1], selected)  # draw line from current point to the next point
 
+    # This function checks whether or not a polygon is facing away from you, and therefore needs to be culled
     def checkIfBackface(self, p):
         global d
-        a = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]]
-        b = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]
+        a = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]]  # alpha
+        b = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]  # beta
 
-        norm = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+        norm = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]] # normal from product
 
+        # calculate the center of the polygonal face
         center = [(p[0][0] + p[1][0] + p[2][0]) / 3, (p[0][1] + p[1][1] + p[2][1]) / 3,
                   (p[0][2] + p[1][2] + p[2][2]) / 3]
-        view = [center[0] - 0, center[1] - 0, center[2] - d]
 
-        if (view[0] * norm[0] + view[1] * norm[1] + view[2] * norm[2]) < 0:
+        view = [center[0] - 0, center[1] - 0, center[2] - d]  # calculate the vector between the viewer and the polygon
+
+        if (view[0] * norm[0] + view[1] * norm[1] + view[2] * norm[2]) < 0:  # vector product to check orientation
             return False
         else:
             return True
+
+    # this function fills the polygonal faces pixel by pixel using scanlines and gradients the color
+    def fillPolygon(self, poly2):
+        global willNotDraw
+        filltable = [[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]]  # edge table extended from notes
+        poly = deepcopy(poly2)
+
+
+
+        for i in range(len(poly)):
+            poly[i] = self.convertToDisplayCoordinates(self.project(poly[i]))  # convert the polys to 2D
+
+        # TODO: Debug
+        for i in range(len(poly)):
+            print(" PROJECTED vertex coords for " + str(i) + " is " + str(poly[i][0]) + "," + str(poly[i][1]) + "," + str(poly[i][2]))
+
+        # TODO: Might need to round or distort the min and max values?
+        # each edge in the edge table needs to be set up. The next two blocks are identical so I won't comment them
+        filltable[0][0] = max(poly[0][1], poly[1][1])  # max Y
+        filltable[0][1] = min(poly[0][1], poly[1][1])  # min Y
+        if poly[1][1] == poly[0][1]:
+            filltable[0][2] = 0  # if line is horizontal, then we won't draw it
+        else:
+            filltable[0][2] = -((poly[1][0]-poly[0][0])/(poly[1][1]-poly[0][1]))  # calculate dX as -deltaX/deltaY
+        if poly[0][1] > poly[1][1]:  # calculate the maximum X value for the line
+            maxx = poly[0][0]
+        else:
+            maxx = poly[1][0]
+        filltable[0][3] = maxx + (filltable[0][2]/2)  # initial x value -> max X + dX/2
+        filltable[0][4] = poly[0][0]  # we need a random X and Y pair from the line
+        filltable[0][5] = poly[0][1]  # ""
+        # calculate the Z value of the point owning the larger Y value and the dZ of that point, making sure to not
+        # divide by zero by just setting the dz to 0 for a constant z value
+        if poly[0][1] < poly[1][1]:
+            filltable[0][6] = poly[0][2]
+            if poly[0][1] == poly[1][1]:
+                filltable[0][7] = 0
+            else:
+                filltable[0][7] = (poly[0][2] - poly[1][2]) / (poly[0][1] - poly[1][1])
+            filltable[0][8] = poly[1][2]
+        else:
+            filltable[0][6] = poly[1][2]
+            if poly[1][1] == poly[0][1]:
+                filltable[0][7] = 0
+            else:
+                filltable[0][7] = (poly[1][2] - poly[0][2]) / (poly[1][1] - poly[0][1])
+            filltable[0][8] = poly[0][2]
+
+
+        filltable[1][0] = max(poly[1][1], poly[2][1])
+        filltable[1][1] = min(poly[1][1], poly[2][1])
+        if poly[2][1] == poly[1][1]:
+            filltable[1][2] = 0
+        else:
+            filltable[1][2] = -((poly[2][0]-poly[1][0])/(poly[2][1]-poly[1][1]))
+        if poly[1][1] > poly[2][1]:
+            maxx = poly[1][0]
+        else:
+            maxx = poly[2][0]
+        filltable[1][3] = maxx + (filltable[1][2]/2)
+        filltable[1][4] = poly[1][0]
+        filltable[1][5] = poly[1][1]
+        if poly[1][1] < poly[2][1]:
+            filltable[1][6] = poly[1][2]
+            if poly[1][1] == poly[2][1]:
+                filltable[1][7] = 0
+            else:
+                filltable[1][7] = (poly[1][2] - poly[2][2]) / (poly[1][1] - poly[2][1])
+            filltable[1][8] = poly[2][2]
+        else:
+            filltable[1][6] = poly[2][2]
+            if poly[1][1] == poly[2][1]:
+                filltable[1][7] = 0
+            else:
+                filltable[1][7] = (poly[2][2] - poly[1][2]) / (poly[2][1] - poly[1][1])
+            filltable[1][8] = poly[1][2]
+
+
+        filltable[2][0] = max(poly[0][1], poly[2][1])
+        filltable[2][1] = min(poly[0][1], poly[2][1])
+        if poly[2][1] == poly[0][1]:
+            filltable[2][2] = 0
+        else:
+            filltable[2][2] = -((poly[2][0]-poly[0][0])/(poly[2][1]-poly[0][1]))
+        if poly[0][1] > poly[2][1]:
+            maxx = poly[0][0]
+        else:
+            maxx = poly[2][0]
+        filltable[2][3] = maxx + (filltable[2][2]/2)
+        filltable[2][4] = poly[2][0]
+        filltable[2][5] = poly[2][1]
+        if poly[0][1] < poly[2][1]:
+            filltable[2][6] = poly[0][2]
+            if poly[0][1] == poly[2][1]:
+                filltable[2][7] = 0
+            else:
+                filltable[2][7] = (poly[0][2] - poly[2][2]) / (poly[0][1] - poly[2][1])
+            filltable[2][8] = poly[2][2]
+        else:
+            filltable[2][6] = poly[2][2]
+            if poly[0][1] == poly[2][1]:
+                filltable[2][7] = 0
+            else:
+                filltable[2][7] = (poly[2][2] - poly[0][2]) / (poly[2][1] - poly[0][1])
+            filltable[2][8] = poly[0][2]
+
+        yMax = max(filltable[0][0], filltable[1][0])  # maximum Y value for the entire poly
+        yMin = min(filltable[0][1], filltable[1][1])  # minimum Y value for the entire poly
+        currline = yMin+1  # where to start our scanlines
+
+        loopcounter = 0 # needed for counting the RELATIVE position, rather than the screen position
+
+        # TODO: LARGE DEBUG BLOCK
+
+        #for i in filltable:
+        #    print(i[7])
+        #    i[7] *= -1
+        #    print(i[7])
+
+        print("\n" + str(poly[0][0]) + "," + str(poly[0][1]) + "," + str(poly[0][2]))
+        print("edge " + str(0) + ": larger Y ( " + str(filltable[0][0]) + " ) has z of " + str(filltable[0][6]))
+        print("\t the smaller Y is " + str(filltable[0][1]) + " leaving " + str(
+            filltable[0][0] - filltable[0][1]) + " scanlines")
+        print("\t each step is a change in z equal to " + str(filltable[0][7]) + ". Also, other z was " + str(filltable[0][8]))
+
+        print("\n" + str(poly[1][0]) + "," + str(poly[1][1]) + "," + str(poly[1][2]))
+        print("edge " + str(1) + ": larger Y ( " + str(filltable[1][0]) + " ) has z of " + str(filltable[1][6]))
+        print("\t the smaller Y is " + str(filltable[1][1]) + " leaving " + str(
+            filltable[1][0] - filltable[1][1]) + " scanlines")
+        print("\t each step is a change in z equal to " + str(filltable[1][7]) + ". Also, other z was " + str(filltable[1][8]))
+
+        print("\n" + str(poly[2][0]) + "," + str(poly[2][1]) + "," + str(poly[2][2]))
+        print("edge " + str(2) + ": larger Y ( " + str(filltable[2][0]) + " ) has z of " + str(filltable[2][6]))
+        print("\t the smaller Y is " + str(filltable[2][1]) + " leaving " + str(
+            filltable[2][0] - filltable[2][1]) + " scanlines")
+        print("\t each step is a change in z equal to " + str(filltable[2][7]) + ". Also, other z was " + str(filltable[2][8]))
+
+        #filltable[0][6] = -filltable[0][6]
+        #filltable[1][6] = -filltable[1][6]
+        #filltable[2][6] = -filltable[2][6]
+
+        #filltable[0][7] = -filltable[0][7]
+        #filltable[1][7] = -filltable[1][7]
+        #filltable[2][7] = -filltable[2][7]
+
+        # PIXEL PAINTING
+        # The following block handles the actual drawing as well as z-buffering, pixel by pixel
+        while currline < yMax:  # while we are between the min and max Y values of the polygon
+            loopcounter += 1
+            xcoords = []
+            zcoords = []
+            for line in filltable:
+                if line[2] != willNotDraw:
+                    if line[0] > currline > line[1]:  # if we are between the min and max values for the line
+                        xcoords.append(line[4]-(line[2]*(currline-line[5])))  # add an X coordinate to our list
+                        zcoords.append(line[6]+(loopcounter*line[7]))  # as well as the corresponding z coordinate
+
+            # if we only hit one point or a horizontal line, next loop
+            if len(xcoords) < 2:
+                currline -= 1
+                continue
+
+            # sanity check
+            if len(xcoords) > 2:
+                print("WTF")
+
+            # sort our point list from smallest to largest
+            if xcoords[1] < xcoords[0]:
+                temp = xcoords[0]
+                xcoords[0] = xcoords[1]
+                xcoords[1] = temp
+                temp = zcoords[0]
+                zcoords[0] = zcoords[1]
+                zcoords[1] = temp
+
+            currPixel = xcoords[0]  # starting point
+            global zbuffer
+
+            innerloopcounter = 0  # needed for RELATIVE position
+
+            # until we hit the rightmost x coordinate
+            while currPixel < xcoords[1]:
+                # the following block clamps the values in the canvas area so we don't get out of bounds errors
+                buffcurrline = currline
+                buffcurrPixel = currPixel
+                if currPixel < 0:
+                    buffcurrPixel = 0
+                if currPixel > CanvasWidth-1:
+                    buffcurrPixel = CanvasWidth-1
+                if currline < 0:
+                    buffcurrline = 0
+                if currline > CanvasHeight-1:
+                    buffcurrline = CanvasHeight-1
+
+                dz = (zcoords[1] - zcoords[0]) / (xcoords[1] - xcoords[0])  # precalculate our deltas for z
+
+                # TODO: debug
+                #dz = abs(zcoords[1]-zcoords[0])/abs(xcoords[1]-xcoords[0])
+                #if zcoords[1]-zcoords[0] > 0:
+                #    dz = -dz
+
+                #print("first z was " + str(zcoords[0]) + " and current z is " + str(zcoords[0]+innerloopcounter * dz) + " BECAUSE curr pixel is " + str(innerloopcounter) + " and dz is " + str(dz)
+                #      + " BECAUSE  first z is " + str(zcoords[0]) + " and second z was " + str(zcoords[1]) + " also x0 and x1 were " + str(xcoords[0]) + " and " + str(xcoords[1]))
+
+                # if the curr zbuffer value is less than what we are entering, continue
+                if zbuffer[int(buffcurrPixel)][int(buffcurrline)] < zcoords[0]+innerloopcounter * dz or isZbuffered is False:
+                    if innerloopcounter == 0:
+                        zbuffer[int(buffcurrPixel)][int(buffcurrline)] = zcoords[0]
+                    else:
+                        # set our z value in the buffer equal to the linearly interpolated z value from the points
+                        # (z = starting z + step number * step size)
+                        zbuffer[int(buffcurrPixel)][int(buffcurrline)] = zcoords[0]+innerloopcounter*dz
+                        
+                        #print("pixel coord " + str(int(buffcurrPixel)) + "," + str(int(buffcurrline)) + " filled with z value " + str(zcoords[0]+innerloopcounter*dz))
+                        #zbuffer[int(buffcurrPixel)][int(buffcurrline)] = zbuffer[int(buffcurrPixel) - 1][int(buffcurrline)] + buffcurrPixel * (dz)
+
+                    pixelColor = self.meshColor % int(clamp(currPixel))  # alter pixel color based on x coordinate
+
+                    # I tried several "pixel" drawing methods and chose what I felt was the fastest
+                    w.create_rectangle(currPixel, currline, currPixel + 1, currline, width=0, fill=pixelColor)
+                    #w.create_oval(currPixel, currline, currPixel+1, currline, width=0, fill=pixelColor)
+                    #w.create_line(currPixel, currline, currPixel+1, currline, fill=pixelColor)
+                innerloopcounter += 1
+                currPixel += 1
+
+            currline += 1
+
+
 
     # Project the 3D endpoints to 2D point using a perspective projection implemented in 'project'
     # Convert the projected endpoints to display coordinates via a call to 'convertToDisplayCoordinates'
@@ -422,7 +673,9 @@ class Mesh:
     # they are only used in rendering
     def project(self, point):
         # create new list to return projected points without altering our shape definition
-        ps = [(d * point[0]) / (-d + point[2]), (d * point[1]) / (-d + point[2]), (point[2]) / (-d + point[2])]
+        # TODO: I CHANGED THE FINAL D FROM -D
+        ps = [(d * point[0]) / (-d + point[2]), (d * point[1]) / (-d + point[2]), point[2]]
+        # ps = [(d * point[0]) / (-d + point[2]), (d * point[1]) / (-d + point[2]), point[2] / (-d + point[2])]
         return ps
 
     # This function converts a 2D point to display coordinates in the tk system.  Note that it will return a
@@ -430,7 +683,7 @@ class Mesh:
     # they are only used in rendering.
     def convertToDisplayCoordinates(self, point):
         # create new list to return converted points without altering our shape definition
-        displayXY = [0.5 * CanvasWidth + point[0], 0.5 * CanvasHeight + point[1]]
+        displayXY = [0.5 * CanvasWidth + point[0], 0.5 * CanvasHeight + point[1], point[2]]
         return displayXY
 
 
@@ -444,6 +697,9 @@ class Mesh:
 def drawScreen():
     global allMeshes
     global selectedMeshes
+    global zbuffer
+
+    zbuffer = [[-9999999999 for x in range(CanvasHeight)] for y in range(CanvasWidth)]
 
     w.delete(ALL)
     for i in allMeshes:
@@ -577,6 +833,8 @@ def makePyramid():
     global selectedMeshes
     global allMeshes
     global numMeshesCreated
+
+    pyramidMesh.meshColor = '#0000%02x'
 
     # Definition of the underlying points
     pyramidMesh.pointList.append([0, 50, 0, 1])
@@ -747,6 +1005,17 @@ def matrixMult4x4(matrix1, matrix2):
 
     return answerMatrix
 
+
+def clamp(num):
+    conversion = 255 / CanvasWidth
+    num *= conversion
+    if num < 0:
+        return 0
+    elif num > 255:
+        return 255
+    else:
+        return num
+
 # **************************************************
 # ******* Functions for Changing UI Behavior *******
 
@@ -850,10 +1119,12 @@ def toggleNIP():
 def updateCanvasCoords(event):
     global CanvasHeight
     global CanvasWidth
+    global zbuffer
 
     CanvasWidth = event.width
     CanvasHeight = event.height
 
+    zbuffer = [[0 for x in range(CanvasHeight)] for y in range(CanvasWidth)]
     drawScreen()
 
 
@@ -865,6 +1136,43 @@ def updateTitleBar():
         meshesString = 'Meshes'
     root.wm_title("Sweet Engine v0.2 -- " + str(len(allMeshes)) + " "
                   + meshesString + " (" + str(len(selectedMeshes)) + " Selected)")
+
+def togglePolyFill():
+    global drawEdges
+    global isFilled
+    global isWireframe
+    global isZbuffered
+
+    if isFilled is False and drawEdges is True:
+        isFilled = True
+    elif isFilled is True and drawEdges is True:
+        drawEdges = False
+    elif isFilled is True and drawEdges is False:
+        isFilled = False
+        drawEdges = True
+
+    drawScreen()
+
+def toggleBackfaceCulling():
+    global isWireframe
+
+    if isWireframe == True:
+        isWireframe = False
+    else:
+        isWireframe = True
+
+    drawScreen()
+
+def toggleZbuffer():
+    global isZbuffered
+
+    if isZbuffered == True:
+        isZbuffered = False
+    else:
+        isZbuffered = True
+
+    drawScreen()
+
 
 
 # *****************************************************
@@ -916,6 +1224,15 @@ coordcheckbox.pack(side=RIGHT)
 
 resetButton = Button(resetcontrols, text="Reset", fg="red", command=reset)
 resetButton.pack(side=LEFT)
+
+togglefillbutton = Button(resetcontrols, text="Toggle Fill", command=togglePolyFill)
+togglefillbutton.pack(side=LEFT)
+
+togglecullbutton = Button(resetcontrols, text="Toggle BFC", command=toggleBackfaceCulling)
+togglecullbutton.pack(side=LEFT)
+
+togglezbufferbutton = Button(resetcontrols, text="Toggle Z-Buffer", command=toggleZbuffer)
+togglezbufferbutton.pack(side=LEFT)
 
 # scale step controls
 
