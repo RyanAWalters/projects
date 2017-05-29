@@ -1,12 +1,13 @@
 ########################################################################################################################
 #
 #   Ryan Walters
-#   101-60-902
-#   1/28/16
+#   Louisiana Tech University
+#   2/11/17
 #
-#   Assignment 3:
+#   Assignment 4:
 #   This program draws three dimensional objects and manipulates them,
-#   projecting results into a 2d plane so that it is viewable on a screen.
+#   projecting results into a 2d plane so that it is viewable on a screen. It shades them using a lighting model that
+#   includes faceted, gouraud, and phong shading with ambient diffuse, point diffuse, and specular highlights.
 #
 #   Currently can scale, rotate, and translate objects. All of which
 #   can be done at different magnitudes.
@@ -18,6 +19,7 @@
 #
 #   You can toggle culling of backfaces, as well as the filling in of polygons. Polygons are filled in pixel by pixel
 #   and can occlude background objects by using a z buffer
+#
 #
 ########################################################################################################################
 
@@ -81,12 +83,16 @@ isFilled = False  # toggle for filling the poly
 isZbuffered = True  # toggle for Z-buffering
 drawEdges = True  # toggle for drawing edges at all
 
+lightingmode = 2  # 0 = unlit (ambient), 1 = point + ambient, 2 = point, ambient and specular
+shadingmode = 2  # 0 = faceted, 1 = gouraud, 2 = phong [only used if usesSmoothing is True, else functions as 0 always]
+Ip = [1,1,1]  # intensity of our point light
+Ia = [1, 1, 1]  # ambient intensity in the scene
+
 
 # **************************************************************************
 # Our mesh object class. All meshes that we create are defined by this class. This class contains the variables and
 # functions that define translations and drawings of the meshes in the engine
 class Mesh:
-
     # These are the basic matrices  that are used for transformations. Only the indexes with a '2' need to be altered.
     translationMatrix = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [2, 2, 2, 1]]
     scalingMatrix = [[2, 0, 0, 0], [0, 2, 0, 0], [0, 0, 2, 0], [0, 0, 0, 1]]
@@ -110,6 +116,16 @@ class Mesh:
         # use these for determining the bounds of the object. Useful for finding midpoint
         self.smallest = [0, 0, 0, 1]  # stores the most negative of all the points' values
         self.largest = [0, 0, 0, 1]  # stores the most negative of all the points' values
+        self.usesSmoothing = False
+
+        self.Kd = [0.9, 0.2, 0.3]  # diffuse reflectivity of object
+        self.Ks = 0.5  # specular reflectivity of object
+        self.Kn = 16  # shininess of object
+
+        # these are somewhat redundant as we are storing the vertex normals in the same array as the vertex coords
+        self.normals = [[0.0, 0.0, 0.0]]
+        self.vertexNormals = [[0.0, 0.0, 0.0]]
+
 
     # make a backup of the locations of the points so we can easily reset the mesh's position
     def initPointCloud(self):
@@ -118,7 +134,7 @@ class Mesh:
     # called upon object creation. Determine starting midpoint.
     def findMidpoint(self):
         for i in self.pointCloud:  # for every point,
-            for j in range(len(self.pointCloud[0])):  # for every dimension in the point vector
+            for j in range(0,3):  # for every dimension in the point vector
                 if i[j] < self.smallest[j]:  # keep track of the smallest number in each dimension
                     self.smallest[j] = i[j]
                 if i[j] > self.largest[j]:  # keep track of the largest number in each dimension
@@ -127,6 +143,53 @@ class Mesh:
         # using the smallest and largest numbers in each dimension, calculate the midpoint by taking the averages
         for i in range(len(self.midpoint)):
             self.midpoint[i] = ((self.largest[i] + self.smallest[i]) / 2)
+
+    # keep an updated list of the surface normals and vertex normals
+    def calculateNormals(self):
+        self.normals = [[0.0, 0.0, 0.0]]
+        self.vertexNormals = [[0.0, 0.0, 0.0]]
+        for i in range(len(self.polyList)):
+            self.normals.append([0.0, 0.0, 0.0])
+        for i in range(len(self.pointList)):
+            self.vertexNormals.append([0.0, 0.0, 0.0])
+
+        i = 0
+        # loop through and calculate the surface normals for every poly by getting the dot product of vertices
+        for p in self.polyList:
+            a = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]]  # alpha
+            b = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]  # beta
+            self.normals[i] = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]  # normal from product
+            i += 1
+
+        # normalize all of the surface normals by dividing each value by the magnitude of the vector
+        # which is found by square rooting the sum of squares
+        for i in range(len(self.normals)):
+            magnitude = math.sqrt(math.pow(self.normals[i][0], 2) + math.pow(self.normals[i][1], 2) + math.pow(self.normals[i][2], 2))
+            if magnitude != 0:
+                self.normals[i][0] /= magnitude
+                self.normals[i][1] /= magnitude
+                self.normals[i][2] /= magnitude
+
+        # for every vertex, for every poly, if vertex belongs to poly, add its value to the surface normal
+        # then normalize this new vector to find the vertex normal
+        h = 0
+        for vertex in self.pointList:
+            summ = [0.0, 0.0, 0.0]
+            for j in range(len(self.polyList)):
+                for i in range(0,3):
+                    if self.polyList[j][i] == vertex:
+                        summ[0] += self.normals[j][0]
+                        summ[1] += self.normals[j][1]
+                        summ[2] += self.normals[j][2]
+            magnitude = math.sqrt(math.pow(summ[0], 2) + math.pow(summ[1], 2) + math.pow(summ[2], 2))
+            self.vertexNormals[h][0] = summ[0] / magnitude
+            self.vertexNormals[h][1] = summ[1] / magnitude
+            self.vertexNormals[h][2] = summ[2] / magnitude
+            # less messy to store the vertex normals alongside the vertex coordinates
+            vertex[4] = self.vertexNormals[h][0]
+            vertex[5] = self.vertexNormals[h][1]
+            vertex[6] = self.vertexNormals[h][2]
+            h += 1
 
     # Resets the pyramid to its original size and location in 3D space
     # by copying the value of each element from our backup to our point cloud
@@ -151,11 +214,11 @@ class Mesh:
         # element by element because it doesn't work otherwise.
         for i in range(len(self.pointCloud)):
             answer[i] = vectorMatrixMult(self.pointCloud[i], matrix)
-            for j in range(len(answer[i])-1):
+            for j in range(len(answer[i]) - 1):
                 self.pointCloud[i][j] = answer[i][j]
 
         # displace the midpoint as well
-        for j in range(0,3):
+        for j in range(0, 3):
             self.midpoint[j] += displacement[j]
 
     # This function performs a simple uniform scale of an object using the origin as the pivot. Scalefactor is scalar
@@ -196,7 +259,7 @@ class Mesh:
             # The composite matrix can be easily defined without multiplying matrices by replacing the translation
             # parts of the matrix with [pivot*(1-scalefactor)]
             for i in range(0, 3):
-                matrix[3][i] = self.midpoint[i]*(1-scalefactor)
+                matrix[3][i] = self.midpoint[i] * (1 - scalefactor)
                 matrix[i][i] = scalefactor
 
             # do our matrix multiplication for every point in our mesh. We store it in answer then transfer it to
@@ -245,16 +308,17 @@ class Mesh:
             p = math.sqrt(b ** 2 + c ** 2)  # p = sqrt(b^2 + c^2)
             l = math.sqrt(a ** 2 + b ** 2 + c ** 2)  # l = sqrt(a^2 + b^2 + c^2)
 
-            # matrices used for steps 2 and 3
-            step2 = [[1,    0,   0, 0],
-                     [0,  c/p, b/p, 0],
-                     [0, -b/p, c/p, 0],
-                     [0,    0,   0, 1]]
 
-            step3 = [[p/l, 0, -a/l, 0],
-                     [0,   1,    0, 0],
-                     [a/l, 0,  p/l, 0],
-                     [0,   0,    0, 1]]
+            # matrices used for steps 2 and 3
+            step2 = [[1, 0, 0, 0],
+                     [0, c / p, b / p, 0],
+                     [0, -b / p, c / p, 0],
+                     [0, 0, 0, 1]]
+
+            step3 = [[p / l, 0, -a / l, 0],
+                     [0, 1, 0, 0],
+                     [a / l, 0, p / l, 0],
+                     [0, 0, 0, 1]]
 
             # step 4 is the actual rotation we are calculating, so we use a different matrix depending on the axis of
             # rotation. The matrices only differ in position and sign of the cosines and sines. So we grab a copy of
@@ -280,15 +344,15 @@ class Mesh:
                 step4[2][2] = math.cos(radians)
 
             # steps 5 and six are the reversal of 2 and 3
-            step5 = [[p/l,  0, a/l, 0],
-                     [0,    1,   0, 0],
-                     [-a/l, 0, p/l, 0],
-                     [0,    0,   0, 1]]
+            step5 = [[p / l, 0, a / l, 0],
+                     [0, 1, 0, 0],
+                     [-a / l, 0, p / l, 0],
+                     [0, 0, 0, 1]]
 
-            step6 = [[1,   0,    0, 0],
-                     [0, c/p, -b/p, 0],
-                     [0, b/p,  c/p, 0],
-                     [0,   0,    0, 1]]
+            step6 = [[1, 0, 0, 0],
+                     [0, c / p, -b / p, 0],
+                     [0, b / p, c / p, 0],
+                     [0, 0, 0, 1]]
 
             # compute the composite matrix by multiplying each matrix in the order that we want to perform the steps.
             matrix = matrixMult4x4(step1, step2)
@@ -385,12 +449,9 @@ class Mesh:
 
     # The function will draw an object by repeatedly calling drawPoly on each polygon in the object
     def drawObject(self, selected):
+        self.calculateNormals()
         for poly in self.meshDef:  # for each polygon,
             self.drawPoly(poly, selected)  # send it to drawPoly()
-
-        # TODO: DEBUG---
-        for i in range(len(self.pointCloud)):
-            print("vertex coords for " + str(i) + " is " + str(self.pointCloud[i][0]) + "," + str(self.pointCloud[i][1]) + "," + str(self.pointCloud[i][2]))
 
     # This function will draw a polygon by repeatedly calling drawLine on each pair of points
     # making up the object.  Remember to draw a line between the last point and the first.
@@ -413,7 +474,7 @@ class Mesh:
         a = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]]  # alpha
         b = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]  # beta
 
-        norm = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]] # normal from product
+        norm = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]  # normal from product
 
         # calculate the center of the polygonal face
         center = [(p[0][0] + p[1][0] + p[2][0]) / 3, (p[0][1] + p[1][1] + p[2][1]) / 3,
@@ -428,18 +489,19 @@ class Mesh:
 
     # this function fills the polygonal faces pixel by pixel using scanlines and gradients the color
     def fillPolygon(self, poly2):
-        global willNotDraw
-        filltable = [[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]]  # edge table extended from notes
+        global willNotDraw, shadingmode, d
+        filltable = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]  # edge table extended from notes
         poly = deepcopy(poly2)
-
-
+        p = deepcopy(poly2)
 
         for i in range(len(poly)):
             poly[i] = self.convertToDisplayCoordinates(self.project(poly[i]))  # convert the polys to 2D
 
-        # TODO: Debug
-        for i in range(len(poly)):
-            print(" PROJECTED vertex coords for " + str(i) + " is " + str(poly[i][0]) + "," + str(poly[i][1]) + "," + str(poly[i][2]))
+        # pre-calculate the vertex lighting intensities using vertex normals and the view vector
+        a0 = self.light([poly[0][4], poly[0][5], poly[0][6]], [poly[0][0], poly[0][1], poly[0][2] - d])
+        a1 = self.light([poly[1][4], poly[1][5], poly[1][6]], [poly[1][0], poly[1][1], poly[1][2] - d])
+        a2 = self.light([poly[2][4], poly[2][5], poly[2][6]], [poly[2][0], poly[2][1], poly[2][2] - d])
 
         # TODO: Might need to round or distort the min and max values?
         # each edge in the edge table needs to be set up. The next two blocks are identical so I won't comment them
@@ -448,150 +510,227 @@ class Mesh:
         if poly[1][1] == poly[0][1]:
             filltable[0][2] = 0  # if line is horizontal, then we won't draw it
         else:
-            filltable[0][2] = -((poly[1][0]-poly[0][0])/(poly[1][1]-poly[0][1]))  # calculate dX as -deltaX/deltaY
+            filltable[0][2] = -((poly[1][0] - poly[0][0]) / (poly[1][1] - poly[0][1]))  # calculate dX as -deltaX/deltaY
         if poly[0][1] > poly[1][1]:  # calculate the maximum X value for the line
             maxx = poly[0][0]
         else:
             maxx = poly[1][0]
-        filltable[0][3] = maxx + (filltable[0][2]/2)  # initial x value -> max X + dX/2
+        filltable[0][3] = maxx + (filltable[0][2] / 2)  # initial x value -> max X + dX/2
         filltable[0][4] = poly[0][0]  # we need a random X and Y pair from the line
         filltable[0][5] = poly[0][1]  # ""
         # calculate the Z value of the point owning the larger Y value and the dZ of that point, making sure to not
         # divide by zero by just setting the dz to 0 for a constant z value
-        if poly[0][1] < poly[1][1]:
+        if poly[0][1] < poly[1][1]:  # we do these blocks based on which y-value is larger, as we work our way down
             filltable[0][6] = poly[0][2]
-            if poly[0][1] == poly[1][1]:
-                filltable[0][7] = 0
+            # 9, 10, and 11 store either the vertex normal, or its intensity. The lerp math doesn't change regardless
+            filltable[0][9] = poly[0][4]
+            filltable[0][10] = poly[0][5]
+            filltable[0][11] = poly[0][6]
+            if shadingmode == 1:  # if gouraud, we store the intensities rather than the normals to lerp through
+                filltable[0][9] = a0[0]
+                filltable[0][10] = a0[1]
+                filltable[0][11] = a0[2]
+            if poly[0][1] == poly[1][1]:  # if y values are equal, the deltas are zero.
+                filltable[0][7], filltable[0][12], filltable[0][13], filltable[0][14] = 0, 0, 0, 0
             else:
                 filltable[0][7] = (poly[0][2] - poly[1][2]) / (poly[0][1] - poly[1][1])
+                # 12, 13, and 14 store the delta step size for either the RGB intensities or the XYZ vertex normals
+                filltable[0][12] = (poly[0][4] - poly[1][4]) / (poly[0][1] - poly[1][1])
+                filltable[0][13] = (poly[0][5] - poly[1][5]) / (poly[0][1] - poly[1][1])
+                filltable[0][14] = (poly[0][6] - poly[1][6]) / (poly[0][1] - poly[1][1])
+                if shadingmode == 1:  # again, if gouraud, the step size deltas must be between the intensities
+                    filltable[0][12] = (a0[0] - a1[0]) / (poly[0][1] - poly[1][1])
+                    filltable[0][13] = (a0[1] - a1[1]) / (poly[0][1] - poly[1][1])
+                    filltable[0][14] = (a0[2] - a1[2]) / (poly[0][1] - poly[1][1])
             filltable[0][8] = poly[1][2]
-        else:
+        else:  # this is the second block. Used if the other vertex has larger Y. Inner code is identical so uncommented
             filltable[0][6] = poly[1][2]
+            filltable[0][9] = poly[1][4]
+            filltable[0][10] = poly[1][5]
+            filltable[0][11] = poly[1][6]
+            if shadingmode == 1:
+                filltable[0][9] = a1[0]
+                filltable[0][10] = a1[1]
+                filltable[0][11] = a1[2]
             if poly[1][1] == poly[0][1]:
-                filltable[0][7] = 0
+                filltable[0][7], filltable[0][12], filltable[0][13], filltable[0][14] = 0, 0, 0, 0
             else:
                 filltable[0][7] = (poly[1][2] - poly[0][2]) / (poly[1][1] - poly[0][1])
+                filltable[0][12] = (poly[1][4] - poly[0][4]) / (poly[1][1] - poly[0][1])
+                filltable[0][13] = (poly[1][5] - poly[0][5]) / (poly[1][1] - poly[0][1])
+                filltable[0][14] = (poly[1][6] - poly[0][6]) / (poly[1][1] - poly[0][1])
+                if shadingmode == 1:
+                    filltable[0][12] = (a1[0] - a0[0]) / (poly[1][1] - poly[0][1])
+                    filltable[0][13] = (a1[1] - a0[1]) / (poly[1][1] - poly[0][1])
+                    filltable[0][14] = (a1[2] - a0[2]) / (poly[1][1] - poly[0][1])
             filltable[0][8] = poly[0][2]
-
+        filltable[0][15] = 1  # each line segment needs a separate counter for looping and applying deltas
 
         filltable[1][0] = max(poly[1][1], poly[2][1])
         filltable[1][1] = min(poly[1][1], poly[2][1])
         if poly[2][1] == poly[1][1]:
             filltable[1][2] = 0
         else:
-            filltable[1][2] = -((poly[2][0]-poly[1][0])/(poly[2][1]-poly[1][1]))
+            filltable[1][2] = -((poly[2][0] - poly[1][0]) / (poly[2][1] - poly[1][1]))
         if poly[1][1] > poly[2][1]:
             maxx = poly[1][0]
         else:
             maxx = poly[2][0]
-        filltable[1][3] = maxx + (filltable[1][2]/2)
+        filltable[1][3] = maxx + (filltable[1][2] / 2)
         filltable[1][4] = poly[1][0]
         filltable[1][5] = poly[1][1]
         if poly[1][1] < poly[2][1]:
             filltable[1][6] = poly[1][2]
+            filltable[1][9] = poly[1][4]
+            filltable[1][10] = poly[1][5]
+            filltable[1][11] = poly[1][6]
+            if shadingmode == 1:
+                filltable[1][9] = a1[0]
+                filltable[1][10] = a1[1]
+                filltable[1][11] = a1[2]
             if poly[1][1] == poly[2][1]:
-                filltable[1][7] = 0
+                filltable[1][7], filltable[1][12], filltable[1][13], filltable[1][14] = 0, 0, 0, 0
             else:
                 filltable[1][7] = (poly[1][2] - poly[2][2]) / (poly[1][1] - poly[2][1])
+                filltable[1][12] = (poly[1][4] - poly[2][4]) / (poly[1][1] - poly[2][1])
+                filltable[1][13] = (poly[1][5] - poly[2][5]) / (poly[1][1] - poly[2][1])
+                filltable[1][14] = (poly[1][6] - poly[2][6]) / (poly[1][1] - poly[2][1])
+                if shadingmode == 1:
+                    filltable[1][12] = (a1[0] - a2[0]) / (poly[1][1] - poly[2][1])
+                    filltable[1][13] = (a1[1] - a2[1]) / (poly[1][1] - poly[2][1])
+                    filltable[1][14] = (a1[2] - a2[2]) / (poly[1][1] - poly[2][1])
             filltable[1][8] = poly[2][2]
         else:
             filltable[1][6] = poly[2][2]
+            filltable[1][9] = poly[2][4]
+            filltable[1][10] = poly[2][5]
+            filltable[1][11] = poly[2][6]
+            if shadingmode == 1:
+                filltable[1][9] = a2[0]
+                filltable[1][10] = a2[1]
+                filltable[1][11] = a2[2]
             if poly[1][1] == poly[2][1]:
-                filltable[1][7] = 0
+                filltable[1][7], filltable[1][12], filltable[1][13], filltable[1][14] = 0, 0, 0, 0
             else:
                 filltable[1][7] = (poly[2][2] - poly[1][2]) / (poly[2][1] - poly[1][1])
+                filltable[1][12] = (poly[2][4] - poly[1][4]) / (poly[2][1] - poly[1][1])
+                filltable[1][13] = (poly[2][5] - poly[1][5]) / (poly[2][1] - poly[1][1])
+                filltable[1][14] = (poly[2][6] - poly[1][6]) / (poly[2][1] - poly[1][1])
+                if shadingmode == 1:
+                    filltable[1][12] = (a2[0] - a1[0]) / (poly[2][1] - poly[1][1])
+                    filltable[1][13] = (a2[1] - a1[1]) / (poly[2][1] - poly[1][1])
+                    filltable[1][14] = (a2[2] - a1[2]) / (poly[2][1] - poly[1][1])
             filltable[1][8] = poly[1][2]
-
+        filltable[1][15] = 1
 
         filltable[2][0] = max(poly[0][1], poly[2][1])
         filltable[2][1] = min(poly[0][1], poly[2][1])
         if poly[2][1] == poly[0][1]:
             filltable[2][2] = 0
         else:
-            filltable[2][2] = -((poly[2][0]-poly[0][0])/(poly[2][1]-poly[0][1]))
+            filltable[2][2] = -((poly[2][0] - poly[0][0]) / (poly[2][1] - poly[0][1]))
         if poly[0][1] > poly[2][1]:
             maxx = poly[0][0]
         else:
             maxx = poly[2][0]
-        filltable[2][3] = maxx + (filltable[2][2]/2)
+        filltable[2][3] = maxx + (filltable[2][2] / 2)
         filltable[2][4] = poly[2][0]
         filltable[2][5] = poly[2][1]
         if poly[0][1] < poly[2][1]:
             filltable[2][6] = poly[0][2]
+            filltable[2][9] = poly[0][4]
+            filltable[2][10] = poly[0][5]
+            filltable[2][11] = poly[0][6]
+            if shadingmode == 1:
+                filltable[2][9] = a0[0]
+                filltable[2][10] = a0[1]
+                filltable[2][11] = a0[2]
             if poly[0][1] == poly[2][1]:
-                filltable[2][7] = 0
+                filltable[2][7], filltable[2][12], filltable[2][13], filltable[2][14] = 0, 0, 0, 0
             else:
                 filltable[2][7] = (poly[0][2] - poly[2][2]) / (poly[0][1] - poly[2][1])
+                filltable[2][12] = (poly[0][4] - poly[2][4]) / (poly[0][1] - poly[2][1])
+                filltable[2][13] = (poly[0][5] - poly[2][5]) / (poly[0][1] - poly[2][1])
+                filltable[2][14] = (poly[0][6] - poly[2][6]) / (poly[0][1] - poly[2][1])
+                if shadingmode == 1:
+                    filltable[2][12] = (a0[0] - a2[0]) / (poly[0][1] - poly[2][1])
+                    filltable[2][13] = (a0[1] - a2[1]) / (poly[0][1] - poly[2][1])
+                    filltable[2][14] = (a0[2] - a2[2]) / (poly[0][1] - poly[2][1])
             filltable[2][8] = poly[2][2]
         else:
             filltable[2][6] = poly[2][2]
+            filltable[2][9] = poly[2][4]
+            filltable[2][10] = poly[2][5]
+            filltable[2][11] = poly[2][6]
+            if shadingmode == 1:
+                filltable[2][9] = a2[0]
+                filltable[2][10] = a2[1]
+                filltable[2][11] = a2[2]
             if poly[0][1] == poly[2][1]:
-                filltable[2][7] = 0
+                filltable[2][7], filltable[2][12], filltable[2][13], filltable[2][14] = 0, 0, 0, 0
             else:
                 filltable[2][7] = (poly[2][2] - poly[0][2]) / (poly[2][1] - poly[0][1])
+                filltable[2][12] = (poly[2][4] - poly[0][4]) / (poly[2][1] - poly[0][1])
+                filltable[2][13] = (poly[2][5] - poly[0][5]) / (poly[2][1] - poly[0][1])
+                filltable[2][14] = (poly[2][6] - poly[0][6]) / (poly[2][1] - poly[0][1])
+                if shadingmode == 1:
+                    filltable[2][12] = (a2[0] - a0[0]) / (poly[2][1] - poly[0][1])
+                    filltable[2][13] = (a2[1] - a0[1]) / (poly[2][1] - poly[0][1])
+                    filltable[2][14] = (a2[2] - a0[2]) / (poly[2][1] - poly[0][1])
             filltable[2][8] = poly[0][2]
+        filltable[2][15] = 1
 
         yMax = max(filltable[0][0], filltable[1][0])  # maximum Y value for the entire poly
         yMin = min(filltable[0][1], filltable[1][1])  # minimum Y value for the entire poly
-        currline = yMin+1  # where to start our scanlines
+        yMidl = sorted([poly[0][1], poly[1][1], poly[2][1]])
+        yMid = yMidl[1]
 
-        loopcounter = 0 # needed for counting the RELATIVE position, rather than the screen position
+        currline = yMin + 1  # where to start our scanlines
+        loopcounter = 0  # needed for counting the RELATIVE position, rather than the screen position
 
-        # TODO: LARGE DEBUG BLOCK
-
-        #for i in filltable:
-        #    print(i[7])
-        #    i[7] *= -1
-        #    print(i[7])
-
-        print("\n" + str(poly[0][0]) + "," + str(poly[0][1]) + "," + str(poly[0][2]))
-        print("edge " + str(0) + ": larger Y ( " + str(filltable[0][0]) + " ) has z of " + str(filltable[0][6]))
-        print("\t the smaller Y is " + str(filltable[0][1]) + " leaving " + str(
-            filltable[0][0] - filltable[0][1]) + " scanlines")
-        print("\t each step is a change in z equal to " + str(filltable[0][7]) + ". Also, other z was " + str(filltable[0][8]))
-
-        print("\n" + str(poly[1][0]) + "," + str(poly[1][1]) + "," + str(poly[1][2]))
-        print("edge " + str(1) + ": larger Y ( " + str(filltable[1][0]) + " ) has z of " + str(filltable[1][6]))
-        print("\t the smaller Y is " + str(filltable[1][1]) + " leaving " + str(
-            filltable[1][0] - filltable[1][1]) + " scanlines")
-        print("\t each step is a change in z equal to " + str(filltable[1][7]) + ". Also, other z was " + str(filltable[1][8]))
-
-        print("\n" + str(poly[2][0]) + "," + str(poly[2][1]) + "," + str(poly[2][2]))
-        print("edge " + str(2) + ": larger Y ( " + str(filltable[2][0]) + " ) has z of " + str(filltable[2][6]))
-        print("\t the smaller Y is " + str(filltable[2][1]) + " leaving " + str(
-            filltable[2][0] - filltable[2][1]) + " scanlines")
-        print("\t each step is a change in z equal to " + str(filltable[2][7]) + ". Also, other z was " + str(filltable[2][8]))
-
-        #filltable[0][6] = -filltable[0][6]
-        #filltable[1][6] = -filltable[1][6]
-        #filltable[2][6] = -filltable[2][6]
-
-        #filltable[0][7] = -filltable[0][7]
-        #filltable[1][7] = -filltable[1][7]
-        #filltable[2][7] = -filltable[2][7]
+        a = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]]  # alpha
+        b = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]  # beta
+        norm = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]  # normal from product
+        # calculate the center of the polygonal face
+        center = [(p[0][0] + p[1][0] + p[2][0]) / 3, (p[0][1] + p[1][1] + p[2][1]) / 3,
+                  (p[0][2] + p[1][2] + p[2][2]) / 3]
+        view = [(center[0] - 0), (center[1] - 0), (center[2] - d)]  # calculate the vector between the viewer and the polygon
+        lighting = self.light(norm, view)
+        pixelColor = '#%02x%02x%02x' % (int(clamp(lighting[0]*255)), int(clamp(lighting[1]*255)), int(clamp(lighting[2]*255)))
 
         # PIXEL PAINTING
         # The following block handles the actual drawing as well as z-buffering, pixel by pixel
         while currline < yMax:  # while we are between the min and max Y values of the polygon
             loopcounter += 1
+            if currline == int(yMid):
+                loopcounter = 1
             xcoords = []
             zcoords = []
+            shadingvalueX = []
+            shadingvalueY = []
+            shadingvalueZ = []
             for line in filltable:
                 if line[2] != willNotDraw:
                     if line[0] > currline > line[1]:  # if we are between the min and max values for the line
-                        xcoords.append(line[4]-(line[2]*(currline-line[5])))  # add an X coordinate to our list
-                        zcoords.append(line[6]+(loopcounter*line[7]))  # as well as the corresponding z coordinate
+                        xcoords.append(line[4] - (line[2] * (currline - line[5])))  # add an X coordinate to our list
+                        zcoords.append(line[6] + (line[15] * line[7]))  # as well as the corresponding z coordinate
+                        # find the lerp values for shading
+                        shadingvalueX.append(line[9] + (line[15] * line[12]))
+                        shadingvalueY.append(line[10] + (line[15] * line[13]))
+                        shadingvalueZ.append(line[11] + (line[15] * line[14]))
+                        # use each line's loop counter separately
+                        line[15] += 1
 
             # if we only hit one point or a horizontal line, next loop
             if len(xcoords) < 2:
-                currline -= 1
+                currline += 1
                 continue
 
             # sanity check
             if len(xcoords) > 2:
                 print("WTF")
 
-            # sort our point list from smallest to largest
+            # sort our point lists from smallest to largest
             if xcoords[1] < xcoords[0]:
                 temp = xcoords[0]
                 xcoords[0] = xcoords[1]
@@ -599,6 +738,15 @@ class Mesh:
                 temp = zcoords[0]
                 zcoords[0] = zcoords[1]
                 zcoords[1] = temp
+                temp = shadingvalueX[0]
+                shadingvalueX[0] = shadingvalueX[1]
+                shadingvalueX[1] = temp
+                temp = shadingvalueY[0]
+                shadingvalueY[0] = shadingvalueY[1]
+                shadingvalueY[1] = temp
+                temp = shadingvalueZ[0]
+                shadingvalueZ[0] = shadingvalueZ[1]
+                shadingvalueZ[1] = temp
 
             currPixel = xcoords[0]  # starting point
             global zbuffer
@@ -612,47 +760,91 @@ class Mesh:
                 buffcurrPixel = currPixel
                 if currPixel < 0:
                     buffcurrPixel = 0
-                if currPixel > CanvasWidth-1:
-                    buffcurrPixel = CanvasWidth-1
+                if currPixel > CanvasWidth - 1:
+                    buffcurrPixel = CanvasWidth - 1
                 if currline < 0:
                     buffcurrline = 0
-                if currline > CanvasHeight-1:
-                    buffcurrline = CanvasHeight-1
+                if currline > CanvasHeight - 1:
+                    buffcurrline = CanvasHeight - 1
 
                 dz = (zcoords[1] - zcoords[0]) / (xcoords[1] - xcoords[0])  # precalculate our deltas for z
-
-                # TODO: debug
-                #dz = abs(zcoords[1]-zcoords[0])/abs(xcoords[1]-xcoords[0])
-                #if zcoords[1]-zcoords[0] > 0:
-                #    dz = -dz
-
-                #print("first z was " + str(zcoords[0]) + " and current z is " + str(zcoords[0]+innerloopcounter * dz) + " BECAUSE curr pixel is " + str(innerloopcounter) + " and dz is " + str(dz)
-                #      + " BECAUSE  first z is " + str(zcoords[0]) + " and second z was " + str(zcoords[1]) + " also x0 and x1 were " + str(xcoords[0]) + " and " + str(xcoords[1]))
+                # calculate second lerp's delta step size for shading
+                dsX = (shadingvalueX[1] - shadingvalueX[0]) / (xcoords[1] - xcoords[0])
+                dsY = (shadingvalueY[1] - shadingvalueY[0]) / (xcoords[1] - xcoords[0])
+                dsZ = (shadingvalueZ[1] - shadingvalueZ[0]) / (xcoords[1] - xcoords[0])
 
                 # if the curr zbuffer value is less than what we are entering, continue
-                if zbuffer[int(buffcurrPixel)][int(buffcurrline)] < zcoords[0]+innerloopcounter * dz or isZbuffered is False:
+                if zbuffer[int(buffcurrPixel)][int(buffcurrline)] < zcoords[0] + innerloopcounter * dz or isZbuffered is False:
                     if innerloopcounter == 0:
                         zbuffer[int(buffcurrPixel)][int(buffcurrline)] = zcoords[0]
                     else:
                         # set our z value in the buffer equal to the linearly interpolated z value from the points
                         # (z = starting z + step number * step size)
-                        zbuffer[int(buffcurrPixel)][int(buffcurrline)] = zcoords[0]+innerloopcounter*dz
-                        
-                        #print("pixel coord " + str(int(buffcurrPixel)) + "," + str(int(buffcurrline)) + " filled with z value " + str(zcoords[0]+innerloopcounter*dz))
-                        #zbuffer[int(buffcurrPixel)][int(buffcurrline)] = zbuffer[int(buffcurrPixel) - 1][int(buffcurrline)] + buffcurrPixel * (dz)
+                        zbuffer[int(buffcurrPixel)][int(buffcurrline)] = zcoords[0] + innerloopcounter * dz
+                    # do the same for our shading values
+                    Ix = shadingvalueX[0] + innerloopcounter * dsX
+                    Iy = shadingvalueY[0] + innerloopcounter * dsY
+                    Iz = shadingvalueZ[0] + innerloopcounter * dsZ
 
-                    pixelColor = self.meshColor % int(clamp(currPixel))  # alter pixel color based on x coordinate
+                    # find the vector from the current pixel to the camera
+                    view = [currPixel, currline, (zbuffer[int(buffcurrPixel)][int(buffcurrline)] - d)]
+                    # differentiate what we are lerping based on whether gouraud or phong
+                    if shadingmode == 2 and self.usesSmoothing:
+                        lighting = self.light([Ix,Iy,Iz], view)
+                    elif shadingmode == 1 and self.usesSmoothing:
+                        lighting = [Ix, Iy, Iz]
 
+                    # apply our lighting model to each pixel
+                    pixelColor = '#%02x%02x%02x' % (int(clamp(lighting[0] * 255)), int(clamp(lighting[1] * 255)), int(clamp(lighting[2] * 255)))
                     # I tried several "pixel" drawing methods and chose what I felt was the fastest
-                    w.create_rectangle(currPixel, currline, currPixel + 1, currline, width=0, fill=pixelColor)
-                    #w.create_oval(currPixel, currline, currPixel+1, currline, width=0, fill=pixelColor)
-                    #w.create_line(currPixel, currline, currPixel+1, currline, fill=pixelColor)
+                    w.create_rectangle(currPixel-1, currline-1, currPixel + 1, currline+1, width=0, fill=pixelColor)
                 innerloopcounter += 1
                 currPixel += 1
 
             currline += 1
 
+    def light(self, norm, view):
+        global Ia, Ip, lightingmode, shadingmode
+        Kd = self.Kd
+        Ks = self.Ks
+        Kn = self.Kn
+        light = [-0.5, 1.0, 1.0]
+        d = 1
 
+        I = [0.0, 0.0, 0.0]
+
+        a = math.sqrt(math.pow(norm[0], 2) + math.pow(norm[1], 2) + math.pow(norm[2], 2))
+        n = [norm[0] / a, norm[1] / a, norm[2] / a]
+        a = math.sqrt(math.pow(view[0], 2) + math.pow(view[1], 2) + math.pow(view[2], 2))
+        v = [view[0] / a, view[1] / a, view[2] / a]
+        a = math.sqrt(math.pow(light[0], 2) + math.pow(light[1], 2) + math.pow(light[2], 2))
+        l = [light[0] / a, light[1] / a, light[2] / a]
+
+        ndotl = n[0]*l[0] + n[1]*l[1] + n[2]*l[2]
+        rdotv = 1
+        if lightingmode == 2 and shadingmode == 2 and self.usesSmoothing:
+            r = self.getR(n, l)
+            rdotv = r[0] * v[0] + r[1] * v[1] + r[2] * v[2]
+
+        for i in range(len(I)):
+            I[i] = Ia[i] * Kd[i]
+            if lightingmode != 0:
+                I[i] += Ip[i] * Kd[i] * ndotl / d
+                if lightingmode == 2 and shadingmode == 2 and self.usesSmoothing:
+                    I[i] += Ip[i] * Ks * math.pow(rdotv, Kn)
+
+        return I
+
+    def getR(self, n, l):
+        tcphi = 2*(n[0]*l[0]+n[1]*l[1]+n[2]*l[2])  # 2 cos phi
+        if tcphi > 0:
+            r = [n[0]-l[0]/tcphi, n[1]-l[1]/tcphi, n[2]-l[2]/tcphi]
+        elif tcphi == 0:
+            r = [-l[0], -l[1], -l[2]]
+        else:
+            r = [-n[0]+l[0]/tcphi, -n[1]+l[1]/tcphi, -n[2]+l[2]/tcphi]
+        a = math.sqrt(r[0]**2 + r[1]**2 + r[2]**2)
+        return [r[0]/a, r[1]/a, r[2]/a]
 
     # Project the 3D endpoints to 2D point using a perspective projection implemented in 'project'
     # Convert the projected endpoints to display coordinates via a call to 'convertToDisplayCoordinates'
@@ -674,7 +866,7 @@ class Mesh:
     def project(self, point):
         # create new list to return projected points without altering our shape definition
         # TODO: I CHANGED THE FINAL D FROM -D
-        ps = [(d * point[0]) / (-d + point[2]), (d * point[1]) / (-d + point[2]), point[2]]
+        ps = [(d * point[0]) / (-d + point[2]), (d * point[1]) / (-d + point[2]), point[2], point[3], point[4], point[5], point[6]]
         # ps = [(d * point[0]) / (-d + point[2]), (d * point[1]) / (-d + point[2]), point[2] / (-d + point[2])]
         return ps
 
@@ -683,7 +875,7 @@ class Mesh:
     # they are only used in rendering.
     def convertToDisplayCoordinates(self, point):
         # create new list to return converted points without altering our shape definition
-        displayXY = [0.5 * CanvasWidth + point[0], 0.5 * CanvasHeight + point[1], point[2]]
+        displayXY = [0.5 * CanvasWidth + point[0], 0.5 * CanvasHeight + point[1], point[2], point[3], point[4], point[5], point[6]]
         return displayXY
 
 
@@ -707,6 +899,7 @@ def drawScreen():
 
     for i in selectedMeshes:
         i.drawObject(True)
+
 
 # ***************************
 
@@ -828,7 +1021,6 @@ def zMinus():
 
 # create a mesh and define it as a pyramid
 def makePyramid():
-
     pyramidMesh = Mesh()
     global selectedMeshes
     global allMeshes
@@ -836,12 +1028,14 @@ def makePyramid():
 
     pyramidMesh.meshColor = '#0000%02x'
 
+    pyramidMesh.Kd =[0.1, 0.1, 0.9]
+
     # Definition of the underlying points
-    pyramidMesh.pointList.append([0, 50, 0, 1])
-    pyramidMesh.pointList.append([-50, -50, -50, 1])
-    pyramidMesh.pointList.append([50, -50, -50, 1])
-    pyramidMesh.pointList.append([50, -50, 50, 1])
-    pyramidMesh.pointList.append([-50, -50, 50, 1])
+    pyramidMesh.pointList.append([0, 50, 0, 1, 0, 0, 0])
+    pyramidMesh.pointList.append([-50, -50, -50, 1, 0, 0, 0])
+    pyramidMesh.pointList.append([50, -50, -50, 1, 0, 0, 0])
+    pyramidMesh.pointList.append([50, -50, 50, 1, 0, 0, 0])
+    pyramidMesh.pointList.append([-50, -50, 50, 1, 0, 0, 0])
 
     # Definition of the polygons
     # Polys are defined in counter clockwise order when viewed from the outside
@@ -885,14 +1079,14 @@ def makeCube():
 
     # for num in range(0,5):
     # Definition of the underlying points
-    cubeMesh.pointList.append([-50, 50, -50, 1])  # 0
-    cubeMesh.pointList.append([50, 50, -50, 1])  # 1
-    cubeMesh.pointList.append([50, 50, 50, 1])  # 2
-    cubeMesh.pointList.append([-50, 50, 50, 1])  # 3
-    cubeMesh.pointList.append([-50, -50, -50, 1])  # 4
-    cubeMesh.pointList.append([50, -50, -50, 1])  # 5
-    cubeMesh.pointList.append([50, -50, 50, 1])  # 6
-    cubeMesh.pointList.append([-50, -50, 50, 1])  # 7
+    cubeMesh.pointList.append([-50, 50, -50, 1, 0, 0, 0])  # 0
+    cubeMesh.pointList.append([50, 50, -50, 1, 0, 0, 0])  # 1
+    cubeMesh.pointList.append([50, 50, 50, 1, 0, 0, 0])  # 2
+    cubeMesh.pointList.append([-50, 50, 50, 1, 0, 0, 0])  # 3
+    cubeMesh.pointList.append([-50, -50, -50, 1, 0, 0, 0])  # 4
+    cubeMesh.pointList.append([50, -50, -50, 1, 0, 0, 0])  # 5
+    cubeMesh.pointList.append([50, -50, 50, 1, 0, 0, 0])  # 6
+    cubeMesh.pointList.append([-50, -50, 50, 1, 0, 0, 0])  # 7
 
     # Definition of the polygons
     # Polys are defined in counter clockwise order when viewed from the outside
@@ -918,7 +1112,7 @@ def makeCube():
     for i in cubeMesh.pointList:
         cubeMesh.pointCloud.append(i)
 
-    # initialize point cloud copy for resetting
+        # initialize point cloud copy for resetting
         cubeMesh.initPointCloud()
 
     # add new mesh to our selected meshes and our list of all meshes
@@ -933,6 +1127,164 @@ def makeCube():
     updateTitleBar()
     return cubeMesh
 
+
+# create a mesh and define it as a pyramid
+def makeCap():
+    capMesh = Mesh()
+    global selectedMeshes
+    global allMeshes
+    global numMeshesCreated
+
+    capMesh.meshColor = '#0000%02x'
+
+    # Definition of the underlying points
+    capMesh.pointList.append([0, 0, 0, 1, 0, 0, 0])
+    capMesh.pointList.append([0, 0, 100, 1, 0, 0, 0])
+    capMesh.pointList.append([70.710678, 0, 70.710678, 1, 0, 0, 0])
+    capMesh.pointList.append([100, 0, 0, 1, 0, 0, 0])
+    capMesh.pointList.append([70.710678, 0, -70.710678, 1, 0, 0, 0])
+    capMesh.pointList.append([0, 0, -100, 1, 0, 0, 0])
+    capMesh.pointList.append([-70.710678, 0, -70.710678, 1, 0, 0, 0])
+    capMesh.pointList.append([-100, 0, 0, 1, 0, 0, 0])
+    capMesh.pointList.append([-70.710678, 0, 70.710678, 1, 0, 0, 0])
+
+
+    # Definition of the polygons
+    # Polys are defined in counter clockwise order when viewed from the outside
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[2], capMesh.pointList[1]])
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[3], capMesh.pointList[2]])
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[4], capMesh.pointList[3]])
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[5], capMesh.pointList[4]])
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[6], capMesh.pointList[5]])
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[7], capMesh.pointList[6]])
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[8], capMesh.pointList[7]])
+    capMesh.polyList.append([capMesh.pointList[0], capMesh.pointList[1], capMesh.pointList[8]])
+
+    # Definition of the object
+    capMesh.meshDef = [capMesh.polyList[0], capMesh.polyList[1], capMesh.polyList[2], capMesh.polyList[3],
+                       capMesh.polyList[4], capMesh.polyList[5], capMesh.polyList[6], capMesh.polyList[7]]
+
+    # Definition of the Pyramid's underlying point cloud.  No structure, just the points.
+    for i in capMesh.pointList:
+        capMesh.pointCloud.append(i)
+
+    # initialize point cloud copy for resetting
+        capMesh.initPointCloud()
+
+    # add new mesh to our selected meshes and our list of all meshes
+    selectedMeshes = [capMesh]
+    allMeshes.append(capMesh)
+
+    meshNames.append(["cap" + str(numMeshesCreated)])  # add a user-friendly name to be associated with the mesh
+    numMeshesCreated += 1  # increment the counter for meshes
+    updateMeshList()  # update our UI's mesh list
+    capMesh.findMidpoint()  # find the midpoint of our new object
+    drawScreen()  # draw the screen
+    updateTitleBar()
+    return capMesh
+
+
+# create a mesh and define it as a pyramid
+def makeTube():
+    tubeMesh = Mesh()
+    global selectedMeshes
+    global allMeshes
+    global numMeshesCreated
+
+    tubeMesh.meshColor = '#0000%02x'
+
+    tubeMesh.usesSmoothing = True
+
+    # Definition of the underlying points
+    tubeMesh.pointList.append([0, 200, 100, 1, 0, 0, 0])
+    tubeMesh.pointList.append([70.710678, 200, 70.710678, 1, 0, 0, 0])
+    tubeMesh.pointList.append([100, 200, 0, 1, 0, 0, 0])
+    tubeMesh.pointList.append([70.710678, 200, -70.710678, 1, 0, 0, 0])
+    tubeMesh.pointList.append([0, 200, -100, 1, 0, 0, 0])
+    tubeMesh.pointList.append([-70.710678, 200, -70.710678, 1, 0, 0, 0])
+    tubeMesh.pointList.append([-100, 200, 0, 1, 0, 0, 0])
+    tubeMesh.pointList.append([-70.710678, 200, 70.710678, 1, 0, 0, 0])
+    #
+    tubeMesh.pointList.append([0, -200, 100, 1, 0, 0, 0])
+    tubeMesh.pointList.append([70.710678, -200, 70.710678, 1, 0, 0, 0])
+    tubeMesh.pointList.append([100, -200, 0, 1, 0, 0, 0])
+    tubeMesh.pointList.append([70.710678, -200, -70.710678, 1, 0, 0, 0])
+    tubeMesh.pointList.append([0, -200, -100, 1, 0, 0, 0])
+    tubeMesh.pointList.append([-70.710678, -200, -70.710678, 1, 0, 0, 0])
+    tubeMesh.pointList.append([-100, -200, 0, 1, 0, 0, 0])
+    tubeMesh.pointList.append([-70.710678, -200, 70.710678, 1, 0, 0, 0])
+
+
+    # Definition of the polygons
+    # Polys are defined in counter clockwise order when viewed from the outside
+    tubeMesh.polyList.append([tubeMesh.pointList[0], tubeMesh.pointList[1], tubeMesh.pointList[9]])
+    tubeMesh.polyList.append([tubeMesh.pointList[0], tubeMesh.pointList[9], tubeMesh.pointList[8]])
+    tubeMesh.polyList.append([tubeMesh.pointList[1], tubeMesh.pointList[2], tubeMesh.pointList[10]])
+    tubeMesh.polyList.append([tubeMesh.pointList[1], tubeMesh.pointList[10], tubeMesh.pointList[9]])
+    tubeMesh.polyList.append([tubeMesh.pointList[2], tubeMesh.pointList[3], tubeMesh.pointList[11]])
+    tubeMesh.polyList.append([tubeMesh.pointList[2], tubeMesh.pointList[11], tubeMesh.pointList[10]])
+    tubeMesh.polyList.append([tubeMesh.pointList[3], tubeMesh.pointList[4], tubeMesh.pointList[12]])
+    tubeMesh.polyList.append([tubeMesh.pointList[3], tubeMesh.pointList[12], tubeMesh.pointList[11]])
+    #
+    tubeMesh.polyList.append([tubeMesh.pointList[4], tubeMesh.pointList[5], tubeMesh.pointList[13]])
+    tubeMesh.polyList.append([tubeMesh.pointList[4], tubeMesh.pointList[13], tubeMesh.pointList[12]])
+    tubeMesh.polyList.append([tubeMesh.pointList[5], tubeMesh.pointList[6], tubeMesh.pointList[14]])
+    tubeMesh.polyList.append([tubeMesh.pointList[5], tubeMesh.pointList[14], tubeMesh.pointList[13]])
+    tubeMesh.polyList.append([tubeMesh.pointList[6], tubeMesh.pointList[7], tubeMesh.pointList[15]])
+    tubeMesh.polyList.append([tubeMesh.pointList[6], tubeMesh.pointList[15], tubeMesh.pointList[14]])
+    tubeMesh.polyList.append([tubeMesh.pointList[7], tubeMesh.pointList[0], tubeMesh.pointList[8]])
+    tubeMesh.polyList.append([tubeMesh.pointList[7], tubeMesh.pointList[8], tubeMesh.pointList[15]])
+
+    # Definition of the object
+    tubeMesh.meshDef = [tubeMesh.polyList[0], tubeMesh.polyList[1], tubeMesh.polyList[2], tubeMesh.polyList[3],
+                        tubeMesh.polyList[4], tubeMesh.polyList[5], tubeMesh.polyList[6], tubeMesh.polyList[7],
+                        tubeMesh.polyList[8], tubeMesh.polyList[9], tubeMesh.polyList[10], tubeMesh.polyList[11],
+                        tubeMesh.polyList[12], tubeMesh.polyList[13], tubeMesh.polyList[14], tubeMesh.polyList[15]]
+
+    # Definition of the Pyramid's underlying point cloud.  No structure, just the points.
+    for i in tubeMesh.pointList:
+        tubeMesh.pointCloud.append(i)
+
+    # initialize point cloud copy for resetting
+        tubeMesh.initPointCloud()
+
+    # add new mesh to our selected meshes and our list of all meshes
+    selectedMeshes = [tubeMesh]
+    allMeshes.append(tubeMesh)
+
+    meshNames.append(["tube" + str(numMeshesCreated)])  # add a user-friendly name to be associated with the mesh
+    numMeshesCreated += 1  # increment the counter for meshes
+    updateMeshList()  # update our UI's mesh list
+    tubeMesh.findMidpoint()  # find the midpoint of our new object
+    drawScreen()  # draw the screen
+    updateTitleBar()
+    return tubeMesh
+
+def makeCylinder():
+    tube1 = makeTube()
+    cap1 = makeCap()
+    global selectedMeshes
+    global TranslationStepSize, RotationStepSize
+    global NIP
+    temptranslationstepsize = TranslationStepSize
+    TranslationStepSize = 200
+    up()
+    TranslationStepSize = -200
+    cap2 = makeCap()
+    up()
+    temprotationstepsize = RotationStepSize
+    RotationStepSize = 180
+    xPlus()
+    RotationStepSize = temprotationstepsize
+    TranslationStepSize = temptranslationstepsize
+    selectedMeshes = [tube1, cap1, cap2]
+    tube1.scaleNIP(0.5)
+    cap1.scaleNIP(0.5)
+    cap2.scaleNIP(0.5)
+    tube1.Kd = [0.8314, 0.6863, 0.2157]
+    cap1.Kd = [0.8314, 0.6863, 0.2157]
+    cap2.Kd = [0.8314, 0.6863, 0.2157]
+    drawScreen()
 
 # deletes all selected meshes
 def deleteMesh():
@@ -980,7 +1332,7 @@ def onSelectionChanged(input):
 
 # multiplies a vector by a 4x4 matrix
 def vectorMatrixMult(vector, matrix):
-    answerVector = [0,0,0,0]
+    answerVector = [0, 0, 0, 0]
 
     # for each column and row we multiply the two values from the two matrices and sum them all up, storing the value in
     # the related index in our new vector
@@ -1015,6 +1367,7 @@ def clamp(num):
         return 255
     else:
         return num
+
 
 # **************************************************
 # ******* Functions for Changing UI Behavior *******
@@ -1137,6 +1490,7 @@ def updateTitleBar():
     root.wm_title("Sweet Engine v0.2 -- " + str(len(allMeshes)) + " "
                   + meshesString + " (" + str(len(selectedMeshes)) + " Selected)")
 
+
 def togglePolyFill():
     global drawEdges
     global isFilled
@@ -1153,6 +1507,7 @@ def togglePolyFill():
 
     drawScreen()
 
+
 def toggleBackfaceCulling():
     global isWireframe
 
@@ -1162,6 +1517,7 @@ def toggleBackfaceCulling():
         isWireframe = True
 
     drawScreen()
+
 
 def toggleZbuffer():
     global isZbuffered
@@ -1173,6 +1529,31 @@ def toggleZbuffer():
 
     drawScreen()
 
+
+def toggleLighting():
+    global lightingmode
+
+    if lightingmode == 1:
+        lightingmode = 2
+    elif lightingmode == 2:
+        lightingmode = 0
+    else:
+        lightingmode = 1
+
+    drawScreen()
+
+
+def toggleShading():
+    global shadingmode
+
+    if shadingmode == 1:
+        shadingmode = 2
+    elif shadingmode == 2:
+        shadingmode = 0
+    else:
+        shadingmode = 1
+
+    drawScreen()
 
 
 # *****************************************************
@@ -1189,8 +1570,23 @@ outerframe.pack(fill="both", expand=True)
 selectionpanel = Frame(outerframe, height=400, width=400)
 selectionpanel.pack(side=LEFT, fill=Y, expand=0, anchor=W)
 
+lightingbutton = Button(selectionpanel, text="Toggle Lighting", fg="blue", command=toggleLighting)
+lightingbutton.pack(fill=X, expand=0)
+
+shadingbutton = Button(selectionpanel, text="Toggle Shading", fg="blue", command=toggleShading)
+shadingbutton.pack(fill=X, expand=0)
+
 createpyramidbutton = Button(selectionpanel, text="New Pyramid", fg="green", command=makePyramid)
 createpyramidbutton.pack(fill=X, expand=0)
+
+createtubebutton = Button(selectionpanel, text="New Tube", fg="green", command=makeTube)
+createtubebutton.pack(fill=X, expand=0)
+
+createcylinderbutton = Button(selectionpanel, text="New Cylinder", fg="green", command=makeCylinder)
+createcylinderbutton.pack(fill=X, expand=0)
+
+createcapbutton = Button(selectionpanel, text="New Cap", fg="green", command=makeCap)
+createcapbutton.pack(fill=X, expand=0)
 
 createcubebutton = Button(selectionpanel, text="New Cube", fg="green", command=makeCube)
 createcubebutton.pack(fill=X, expand=0)
@@ -1204,7 +1600,6 @@ rightframe.pack(side=RIGHT, fill="both", expand=True)
 w = Canvas(rightframe, width=CanvasWidth, height=CanvasHeight, bg="white", relief=RIDGE, borderwidth=4)
 w.pack(side=TOP, fill="both", expand=True)
 w.bind('<Configure>', updateCanvasCoords)
-
 
 controlpanel = Frame(rightframe, height=400)
 controlpanel.pack(side=BOTTOM)
@@ -1367,10 +1762,11 @@ zPlusButton.pack(side=TOP)
 zMinusButton = Button(rotationcontrolsz, text="Z-", command=zMinus, repeatdelay=500, repeatinterval=50)
 zMinusButton.pack(side=BOTTOM)
 
-
 # **************************************************************************
 # ****************** Place Initialization Conditions Here ******************
 
+mesh = makeCap()
+mesh.light([1, 1, 1], [1, 1, 1])
 
 # MUST GO AT END OF PROGRAM!!! PLACE NOTHING BELOW THIS!!!!!!!!!!!!
 root.mainloop()
