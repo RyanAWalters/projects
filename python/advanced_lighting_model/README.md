@@ -1,5 +1,5 @@
 # Advanced Lighting Model
-Model that creates the classic image of reflective spheres on a checkboard. 
+Model that creates the classic image of reflective spheres on a checkerboard. 
 
 *This school project required the used of TKinter and nothing else. Even use of numpy was forbidden. Every pixel was required to be a rectangle object scaled to as small as possible on a canvas, and matrix manipulation and linear alegbra were done manually. As such, this program is nearly exponentially slower the more "pixels" are being rendered. I wish it wasn't so, but it is what it is.*
 
